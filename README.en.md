@@ -4,6 +4,8 @@
 
 [简体中文](README.md) · [Setup](docs/GETTING-STARTED.md) · [Validation](docs/VALIDATION.md)
 
+[Download v0.1.0-alpha.1](https://github.com/hhhoratioxu/HoriPlay/releases/tag/v0.1.0-alpha.1): Windows EXE/MSI, Apple Silicon/Intel DMGs, native diagnostic tools, SHA-256 sums and full-commit build records. Application installers are unsigned and Mac DMGs are not notarized. Only the Windows EXE has a recorded installation/startup smoke.
+
 HoriPlay targets Windows/macOS remote game streaming and local multiplayer through independent remote controllers. **This release is an input-chain alpha. Video/audio streaming and real two-player game acceptance are incomplete. It is not yet a playable remote-streaming product.**
 
 The implemented chain is SDL3 physical input → versioned analog-preserving reports → authenticated WebRTC DTLS/SCTP → host permission/sequence checks → standalone VIIPER Xbox 360 backend → independent Windows XInput observation. Game compatibility is a separate, manually recorded acceptance result; the UI never infers it from network connectivity.

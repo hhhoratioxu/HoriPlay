@@ -60,3 +60,17 @@ Windows and macOS CI at commit `96d5e7db89e2636275d15c64288a1430e705378d` both c
 The first Windows installer build compiled the MSVC executable and NSIS setup, then failed on MSI's numeric prerelease-version restriction. The Windows config now maps `0.1.0-alpha.1` to MSI version `0.1.0.1`. The unpublished build was restarted after clearing rumble/freshness state for each new controller grant; final artifacts must name the corrected source commit in their BUILD records.
 
 The coturn deployment sample was statically checked against the 4.6.3 upstream options. The removed `no-loopback-peers` option is omitted; the upstream default denies loopback peers. Docker Compose was not executed on this PC because Docker is unavailable.
+
+## Published alpha verification
+
+- Actual public, non-draft prerelease: [v0.1.0-alpha.1](https://github.com/hhhoratioxu/HoriPlay/releases/tag/v0.1.0-alpha.1).
+- Exact release source/tag: `e360f6a60439b429221e279a1f1a02a2d5e539b2`. All three BUILD records and the GitHub tag/Release target agree.
+- [Final CI](https://github.com/hhhoratioxu/HoriPlay/actions/runs/39261170994): Windows and macOS passed all 15 protocol/core tests, strict Clippy, desktop check, frontend build and actual native SDL engine loading.
+- [Final installer/release workflow](https://github.com/hhhoratioxu/HoriPlay/actions/runs/39261225037): Windows x64 MSVC EXE + MSI, aarch64 macOS DMG, x86_64 macOS DMG and all portable diagnostic tools succeeded. Runner Rust was 1.99.1. Thirteen assets were actually published.
+- All 13 assets were downloaded from the published Release. The seven installer/tool archives passed local nonempty/size/SHA256 checks against their BUILD files. [Local checksum results](evidence/release-checks.json).
+- Mac tool archives were extracted and their CLI, signaling server and SDL dylib Mach-O CPU fields independently checked: ARM64 `16777228` and x86_64 `16777223`. This checks architecture, without claiming a physical Mac installation.
+- Windows NSIS EXE installed successfully with exit code 0 into `D:\CodeX\Builds\HoriPlay\installed-alpha`. The executable and bundled SDL3 were present. With the dev server stopped, a four-second startup smoke observed the expected titled window, `Responding=true` and no early process exit. The smoke process was then stopped. [Startup record](evidence/installed-windows-startup.json). Full native UI interaction/gameplay was not accepted by this check.
+- Published portable Windows tools loaded their bundled SDL3 without a source-tree environment override. Native engine smoke completed with `input_error=null` and `devices=[]`; independent XInput saw no occupied controller indices. [Native engine record](evidence/native-engine-windows-release.json).
+- Published optimized Windows CLI: **300/300** actual WebRTC synthetic-input round trips completed, 0 timeout / 0 congestion skips, RTT **P50 0.2783 ms / P95 0.4068 ms / P99 0.6778 ms**. [Raw release benchmark](evidence/webrtc-loopback-windows-release.json). These are same-machine 56-byte DTLS/SCTP round trips, not physical input-to-game, WAN, capture-to-display or FPS measurements.
+
+MSI installation and physical Mac DMG installation are untested. The application is unsigned/unnotarized, virtual-driver installation still awaits explicit user approval, and all physical/game/media rows above remain `not performed`. Deployment documentation on main includes the post-tag coturn sample correction; packaged application binaries remain pinned to the release source above.

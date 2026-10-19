@@ -1,0 +1,20 @@
+{
+  "transport": "WebRTC ICE + DTLS + SCTP unordered / maxRetransmits=0",
+  "path": {
+    "connected": true,
+    "local_candidate": "udp host 127.0.0.1:53826",
+    "remote_candidate": "udp host 127.0.0.1:53827",
+    "connection_type": "P2P Direct (inspect candidate addresses for LAN/IPv4/IPv6)"
+  },
+  "attempted": 300,
+  "completed": 300,
+  "timed_out": 0,
+  "skipped_congested": 0,
+  "rtt": {
+    "samples": 300,
+    "p50_ms": 0.2783,
+    "p95_ms": 0.4068,
+    "p99_ms": 0.6778
+  },
+  "scope": "Same-machine synthetic 56-byte input frame round trip. Excludes SDL physical sampling, virtual driver, game, WAN and video; timeout count is not measured Internet packet loss."
+}

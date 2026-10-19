@@ -4,6 +4,8 @@
 
 [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [驱动调研](docs/VIRTUAL-GAMEPAD.md) · [运行指南](docs/GETTING-STARTED.md) · [验收记录](docs/VALIDATION.md)
 
+下载：[v0.1.0-alpha.1 Release](https://github.com/hhhoratioxu/HoriPlay/releases/tag/v0.1.0-alpha.1) · [Windows EXE](https://github.com/hhhoratioxu/HoriPlay/releases/download/v0.1.0-alpha.1/HoriPlay-windows-x64-setup.exe) · [Windows MSI](https://github.com/hhhoratioxu/HoriPlay/releases/download/v0.1.0-alpha.1/HoriPlay-windows-x64.msi) · [Apple Silicon DMG](https://github.com/hhhoratioxu/HoriPlay/releases/download/v0.1.0-alpha.1/HoriPlay-macos-arm64.dmg) · [Intel DMG](https://github.com/hhhoratioxu/HoriPlay/releases/download/v0.1.0-alpha.1/HoriPlay-macos-x64.dmg)。应用安装包未签名，macOS 未公证；仅 Windows EXE 执行了安装启动检查。
+
 HoriPlay 的目标是 Windows / macOS 低延迟远程游戏与独立手柄同玩。**当前交付聚焦真实输入链路，不是已达到最终验收的可玩串流软件。视频、音频和真实双人游戏验收尚未完成。**
 
 ![Controller settings browser preview with native capability unavailable](docs/controller-preview.png)

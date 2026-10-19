@@ -1,0 +1,44 @@
+[
+  {
+    "Name": "HoriPlay-macos-arm64.dmg",
+    "Bytes": 7302748,
+    "SHA256": "8f93f02432c039297cd3d34cb3bb9aa697c775c49724b94bf1ce11edfe3cd10c",
+    "Verified": true
+  },
+  {
+    "Name": "HoriPlay-tools-macos-arm64.tar.gz",
+    "Bytes": 7360526,
+    "SHA256": "ee6437ce4b97f6bf54dd6f9df865184318aae318fbd82994b3d77e746c44ec5b",
+    "Verified": true
+  },
+  {
+    "Name": "HoriPlay-macos-x64.dmg",
+    "Bytes": 7722206,
+    "SHA256": "b9cb03af828229253394146957bfb5abd8c92c262fb0e3cbbd338a83329add27",
+    "Verified": true
+  },
+  {
+    "Name": "HoriPlay-tools-macos-x64.tar.gz",
+    "Bytes": 7779319,
+    "SHA256": "9012c32dc80a9dc980af57c48bb70318101ada57392d7508e3c13f5d2b76e9d2",
+    "Verified": true
+  },
+  {
+    "Name": "HoriPlay-tools-windows-x64.zip",
+    "Bytes": 7900497,
+    "SHA256": "e533666c13843486a8609940b8c68050a55121af27004efc68efc63c7411c813",
+    "Verified": true
+  },
+  {
+    "Name": "HoriPlay-windows-x64-setup.exe",
+    "Bytes": 5624426,
+    "SHA256": "89c5ba61b06c5055ca1ecc38f251ea03386e1295141a5e7650be92f9b3829303",
+    "Verified": true
+  },
+  {
+    "Name": "HoriPlay-windows-x64.msi",
+    "Bytes": 8155136,
+    "SHA256": "cca0e999784f683c683ba752b65d38f725de20367766cd7307dbd30bbcc9b796",
+    "Verified": true
+  }
+]
