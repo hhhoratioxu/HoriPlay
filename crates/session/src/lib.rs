@@ -378,7 +378,11 @@ async fn run(
                     if !approved||!peer.ready().await||s.remote.as_ref().map(|r|r.id)!=Some(controller){bail!("controller is not connected or peer not authorized");}
                     if backend.is_some(){bail!("revoke the current controller before assigning another slot");}
                     match Viiper::connect(config.viiper_address,slot) {
-                        Ok(device)=>{backend=Some(device);receiver.slots.assign(slot,Owner{peer:invite.room,controller}).map_err(anyhow::Error::msg)?;grant=Some((controller,slot));control(&peer,&Control::Grant{id:controller,slot}).await?;let mut s=snapshot.lock().unwrap();s.granted_slot=Some(slot);s.error=None;},
+                        Ok(device)=>{
+                            // Feedback and freshness belong to this permission grant only.
+                            last_rumble=None;watchdog=Watchdog::new(Duration::from_millis(250));
+                            backend=Some(device);receiver.slots.assign(slot,Owner{peer:invite.room,controller}).map_err(anyhow::Error::msg)?;grant=Some((controller,slot));control(&peer,&Control::Grant{id:controller,slot}).await?;let mut s=snapshot.lock().unwrap();s.granted_slot=Some(slot);s.error=None;
+                        },
                         Err(e)=>{snapshot.lock().unwrap().error=Some(format!("{e:#}"));}
                     }
                 },
