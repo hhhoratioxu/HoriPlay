@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-10-19T16:19:46.1011698Z",
+  "source_commit": "d6b141b1d37a26ff2934b1cc8230d73c7b75f9a6",
+  "executable": "D:\\iCloud\\iCloudDrive\\Documents\\CodeX\\Hori开源\\HoriPlay\\artifacts\\performance-preview\\HoriPlay-performance-windows-x64\\HoriPlay.exe",
+  "exited_early": false,
+  "window_title": "HoriPlay · Controller Alpha",
+  "responding": true,
+  "dev_server_listening": false,
+  "custom_protocol": true,
+  "scope": "Five-second process/window startup only; no full UI interaction, physical controller, virtual driver or game acceptance."
+}

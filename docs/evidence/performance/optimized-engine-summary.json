@@ -1,50 +1,50 @@
 {
   "label": "optimized",
-  "captured_at_utc": "2026-10-19T16:03:49.8073040Z",
-  "executable_sha256": "8455f0453480f22d0499af6c4b6bda6eeb582c6a6a898c390f5d7a8d9561bc61",
+  "captured_at_utc": "2026-10-19T16:18:31.7828365Z",
+  "executable_sha256": "afcc8ed587dfdfeb9e542726306e50bace58ee2f6a2c77900bef9daf3a885014",
   "seconds_per_run": 12,
   "logical_processors": 20,
   "runs": [
     {
       "run": 1,
-      "wall_seconds": 12.2201948,
-      "cpu_ms": 156.25,
-      "cpu_percent_of_one_core": 1.2786211885918546,
-      "peak_working_set_bytes": 16166912,
+      "wall_seconds": 12.2078957,
+      "cpu_ms": 93.75,
+      "cpu_percent_of_one_core": 0.7679456173597552,
+      "peak_working_set_bytes": 16134144,
       "physical_devices": 0,
       "poll_work": {
         "samples": 512,
         "p50_ms": 0.0048,
         "p95_ms": 0.0083,
-        "p99_ms": 0.0185
+        "p99_ms": 0.028
       }
     },
     {
       "run": 2,
-      "wall_seconds": 12.195502,
-      "cpu_ms": 140.625,
-      "cpu_percent_of_one_core": 1.1530890651323742,
-      "peak_working_set_bytes": 16121856,
+      "wall_seconds": 12.1991055,
+      "cpu_ms": 125.0,
+      "cpu_percent_of_one_core": 1.0246652920576842,
+      "peak_working_set_bytes": 16248832,
       "physical_devices": 0,
       "poll_work": {
         "samples": 512,
         "p50_ms": 0.0047,
-        "p95_ms": 0.008,
-        "p99_ms": 0.0122
+        "p95_ms": 0.0083,
+        "p99_ms": 0.017900000000000003
       }
     },
     {
       "run": 3,
-      "wall_seconds": 12.1988586,
+      "wall_seconds": 12.1965907,
       "cpu_ms": 156.25,
-      "cpu_percent_of_one_core": 1.280857538589717,
-      "peak_working_set_bytes": 16195584,
+      "cpu_percent_of_one_core": 1.2810957081637575,
+      "peak_working_set_bytes": 16166912,
       "physical_devices": 0,
       "poll_work": {
         "samples": 512,
         "p50_ms": 0.0046,
-        "p95_ms": 0.008199999999999999,
-        "p99_ms": 0.0166
+        "p95_ms": 0.0085,
+        "p99_ms": 0.0183
       }
     }
   ],

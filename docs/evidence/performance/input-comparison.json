@@ -1,6 +1,6 @@
 {
-  "captured_at_utc": "2026-10-19T16:05:13.5943937Z",
-  "executable_sha256": "8455f0453480f22d0499af6c4b6bda6eeb582c6a6a898c390f5d7a8d9561bc61",
+  "captured_at_utc": "2026-10-19T16:16:56.3783739Z",
+  "executable_sha256": "afcc8ed587dfdfeb9e542726306e50bace58ee2f6a2c77900bef9daf3a885014",
   "source": "Same executable in both modes; comparison isolates the old 8 ms polling gate. It is not a full old-vs-new Engine benchmark.",
   "runs": [
     {
@@ -12,20 +12,20 @@
         "accepted": 600,
         "sample_to_authorized_receiver": {
           "samples": 600,
-          "p50_ms": 10.691799999999999,
-          "p95_ms": 13.7953,
-          "p99_ms": 14.2326
+          "p50_ms": 10.6731,
+          "p95_ms": 14.1921,
+          "p99_ms": 14.3781
         },
         "wait_before_send": {
           "samples": 1024,
-          "p50_ms": 10.3506,
-          "p95_ms": 13.5943,
-          "p99_ms": 14.085500000000001
+          "p50_ms": 10.5191,
+          "p95_ms": 14.037799999999999,
+          "p99_ms": 14.1298
         },
         "path": {
           "connected": true,
-          "local_candidate": "udp host 127.0.0.1:56607",
-          "remote_candidate": "udp host 127.0.0.1:56608",
+          "local_candidate": "udp host 127.0.0.1:50780",
+          "remote_candidate": "udp host 127.0.0.1:50781",
           "connection_type": "P2P Direct (inspect candidate addresses for LAN/IPv4/IPv6)"
         },
         "scope": "Same-machine synthetic sample -> production mailbox/sender -> real WebRTC DTLS/SCTP -> permission/sequence-checked receiver. 32 warmup samples excluded. Poll mode reproduces the former scheduling gate using the same optimized sender; it is not a run of the old full Engine. Excludes SDL physical acquisition, virtual driver, game, WAN, video/audio. Each sample must arrive; a timeout fails the command instead of disappearing from percentiles."
@@ -40,20 +40,20 @@
         "accepted": 600,
         "sample_to_authorized_receiver": {
           "samples": 600,
-          "p50_ms": 0.12689999999999999,
-          "p95_ms": 0.22340000000000002,
-          "p99_ms": 0.3223
+          "p50_ms": 0.131,
+          "p95_ms": 0.2278,
+          "p99_ms": 0.27090000000000003
         },
         "wait_before_send": {
           "samples": 1024,
-          "p50_ms": 0.015000000000000001,
-          "p95_ms": 0.0453,
-          "p99_ms": 0.074
+          "p50_ms": 0.0178,
+          "p95_ms": 0.0407,
+          "p99_ms": 0.0668
         },
         "path": {
           "connected": true,
-          "local_candidate": "udp host 127.0.0.1:59147",
-          "remote_candidate": "udp host 127.0.0.1:59148",
+          "local_candidate": "udp host 127.0.0.1:51139",
+          "remote_candidate": "udp host 127.0.0.1:51140",
           "connection_type": "P2P Direct (inspect candidate addresses for LAN/IPv4/IPv6)"
         },
         "scope": "Same-machine synthetic sample -> production mailbox/sender -> real WebRTC DTLS/SCTP -> permission/sequence-checked receiver. 32 warmup samples excluded. Poll mode reproduces the former scheduling gate using the same optimized sender; it is not a run of the old full Engine. Excludes SDL physical acquisition, virtual driver, game, WAN, video/audio. Each sample must arrive; a timeout fails the command instead of disappearing from percentiles."
@@ -68,104 +68,104 @@
         "accepted": 600,
         "sample_to_authorized_receiver": {
           "samples": 600,
-          "p50_ms": 0.12860000000000002,
-          "p95_ms": 0.2689,
-          "p99_ms": 0.3794
+          "p50_ms": 0.13990000000000002,
+          "p95_ms": 0.24429999999999996,
+          "p99_ms": 0.5168
+        },
+        "wait_before_send": {
+          "samples": 1024,
+          "p50_ms": 0.016900000000000002,
+          "p95_ms": 0.0435,
+          "p99_ms": 0.16620000000000001
+        },
+        "path": {
+          "connected": true,
+          "local_candidate": "udp host 127.0.0.1:59542",
+          "remote_candidate": "udp host 127.0.0.1:59543",
+          "connection_type": "P2P Direct (inspect candidate addresses for LAN/IPv4/IPv6)"
+        },
+        "scope": "Same-machine synthetic sample -> production mailbox/sender -> real WebRTC DTLS/SCTP -> permission/sequence-checked receiver. 32 warmup samples excluded. Poll mode reproduces the former scheduling gate using the same optimized sender; it is not a run of the old full Engine. Excludes SDL physical acquisition, virtual driver, game, WAN, video/audio. Each sample must arrive; a timeout fails the command instead of disappearing from percentiles."
+      }
+    },
+    {
+      "run": 2,
+      "mode": "poll",
+      "result": {
+        "scheduling": "8ms polling gate (comparison fixture)",
+        "attempted": 600,
+        "accepted": 600,
+        "sample_to_authorized_receiver": {
+          "samples": 600,
+          "p50_ms": 10.7073,
+          "p95_ms": 14.201,
+          "p99_ms": 14.6546
+        },
+        "wait_before_send": {
+          "samples": 1024,
+          "p50_ms": 10.526,
+          "p95_ms": 13.931199999999999,
+          "p99_ms": 14.2431
+        },
+        "path": {
+          "connected": true,
+          "local_candidate": "udp host 127.0.0.1:56917",
+          "remote_candidate": "udp host 127.0.0.1:56918",
+          "connection_type": "P2P Direct (inspect candidate addresses for LAN/IPv4/IPv6)"
+        },
+        "scope": "Same-machine synthetic sample -> production mailbox/sender -> real WebRTC DTLS/SCTP -> permission/sequence-checked receiver. 32 warmup samples excluded. Poll mode reproduces the former scheduling gate using the same optimized sender; it is not a run of the old full Engine. Excludes SDL physical acquisition, virtual driver, game, WAN, video/audio. Each sample must arrive; a timeout fails the command instead of disappearing from percentiles."
+      }
+    },
+    {
+      "run": 3,
+      "mode": "poll",
+      "result": {
+        "scheduling": "8ms polling gate (comparison fixture)",
+        "attempted": 600,
+        "accepted": 600,
+        "sample_to_authorized_receiver": {
+          "samples": 600,
+          "p50_ms": 10.714400000000001,
+          "p95_ms": 13.7748,
+          "p99_ms": 14.3299
+        },
+        "wait_before_send": {
+          "samples": 1024,
+          "p50_ms": 10.536,
+          "p95_ms": 13.606399999999999,
+          "p99_ms": 14.0948
+        },
+        "path": {
+          "connected": true,
+          "local_candidate": "udp host 127.0.0.1:57843",
+          "remote_candidate": "udp host 127.0.0.1:57844",
+          "connection_type": "P2P Direct (inspect candidate addresses for LAN/IPv4/IPv6)"
+        },
+        "scope": "Same-machine synthetic sample -> production mailbox/sender -> real WebRTC DTLS/SCTP -> permission/sequence-checked receiver. 32 warmup samples excluded. Poll mode reproduces the former scheduling gate using the same optimized sender; it is not a run of the old full Engine. Excludes SDL physical acquisition, virtual driver, game, WAN, video/audio. Each sample must arrive; a timeout fails the command instead of disappearing from percentiles."
+      }
+    },
+    {
+      "run": 3,
+      "mode": "event",
+      "result": {
+        "scheduling": "event notification (production)",
+        "attempted": 600,
+        "accepted": 600,
+        "sample_to_authorized_receiver": {
+          "samples": 600,
+          "p50_ms": 0.1283,
+          "p95_ms": 0.21800000000000003,
+          "p99_ms": 0.2808
         },
         "wait_before_send": {
           "samples": 1024,
           "p50_ms": 0.016,
-          "p95_ms": 0.0533,
-          "p99_ms": 0.1261
+          "p95_ms": 0.036699999999999997,
+          "p99_ms": 0.06999999999999999
         },
         "path": {
           "connected": true,
-          "local_candidate": "udp host 127.0.0.1:55751",
-          "remote_candidate": "udp host 127.0.0.1:55752",
-          "connection_type": "P2P Direct (inspect candidate addresses for LAN/IPv4/IPv6)"
-        },
-        "scope": "Same-machine synthetic sample -> production mailbox/sender -> real WebRTC DTLS/SCTP -> permission/sequence-checked receiver. 32 warmup samples excluded. Poll mode reproduces the former scheduling gate using the same optimized sender; it is not a run of the old full Engine. Excludes SDL physical acquisition, virtual driver, game, WAN, video/audio. Each sample must arrive; a timeout fails the command instead of disappearing from percentiles."
-      }
-    },
-    {
-      "run": 2,
-      "mode": "poll",
-      "result": {
-        "scheduling": "8ms polling gate (comparison fixture)",
-        "attempted": 600,
-        "accepted": 600,
-        "sample_to_authorized_receiver": {
-          "samples": 600,
-          "p50_ms": 10.721100000000002,
-          "p95_ms": 13.9583,
-          "p99_ms": 14.359200000000001
-        },
-        "wait_before_send": {
-          "samples": 1024,
-          "p50_ms": 10.5503,
-          "p95_ms": 13.7857,
-          "p99_ms": 14.1463
-        },
-        "path": {
-          "connected": true,
-          "local_candidate": "udp host 127.0.0.1:52474",
-          "remote_candidate": "udp host 127.0.0.1:52475",
-          "connection_type": "P2P Direct (inspect candidate addresses for LAN/IPv4/IPv6)"
-        },
-        "scope": "Same-machine synthetic sample -> production mailbox/sender -> real WebRTC DTLS/SCTP -> permission/sequence-checked receiver. 32 warmup samples excluded. Poll mode reproduces the former scheduling gate using the same optimized sender; it is not a run of the old full Engine. Excludes SDL physical acquisition, virtual driver, game, WAN, video/audio. Each sample must arrive; a timeout fails the command instead of disappearing from percentiles."
-      }
-    },
-    {
-      "run": 3,
-      "mode": "poll",
-      "result": {
-        "scheduling": "8ms polling gate (comparison fixture)",
-        "attempted": 600,
-        "accepted": 600,
-        "sample_to_authorized_receiver": {
-          "samples": 600,
-          "p50_ms": 10.6654,
-          "p95_ms": 13.8967,
-          "p99_ms": 14.5235
-        },
-        "wait_before_send": {
-          "samples": 1024,
-          "p50_ms": 10.5207,
-          "p95_ms": 13.778699999999999,
-          "p99_ms": 14.1952
-        },
-        "path": {
-          "connected": true,
-          "local_candidate": "udp host 127.0.0.1:53650",
-          "remote_candidate": "udp host 127.0.0.1:53651",
-          "connection_type": "P2P Direct (inspect candidate addresses for LAN/IPv4/IPv6)"
-        },
-        "scope": "Same-machine synthetic sample -> production mailbox/sender -> real WebRTC DTLS/SCTP -> permission/sequence-checked receiver. 32 warmup samples excluded. Poll mode reproduces the former scheduling gate using the same optimized sender; it is not a run of the old full Engine. Excludes SDL physical acquisition, virtual driver, game, WAN, video/audio. Each sample must arrive; a timeout fails the command instead of disappearing from percentiles."
-      }
-    },
-    {
-      "run": 3,
-      "mode": "event",
-      "result": {
-        "scheduling": "event notification (production)",
-        "attempted": 600,
-        "accepted": 600,
-        "sample_to_authorized_receiver": {
-          "samples": 600,
-          "p50_ms": 0.124,
-          "p95_ms": 0.2311,
-          "p99_ms": 0.33349999999999996
-        },
-        "wait_before_send": {
-          "samples": 1024,
-          "p50_ms": 0.0147,
-          "p95_ms": 0.0505,
-          "p99_ms": 0.1133
-        },
-        "path": {
-          "connected": true,
-          "local_candidate": "udp host 127.0.0.1:53308",
-          "remote_candidate": "udp host 127.0.0.1:53309",
+          "local_candidate": "udp host 127.0.0.1:64868",
+          "remote_candidate": "udp host 127.0.0.1:64869",
           "connection_type": "P2P Direct (inspect candidate addresses for LAN/IPv4/IPv6)"
         },
         "scope": "Same-machine synthetic sample -> production mailbox/sender -> real WebRTC DTLS/SCTP -> permission/sequence-checked receiver. 32 warmup samples excluded. Poll mode reproduces the former scheduling gate using the same optimized sender; it is not a run of the old full Engine. Excludes SDL physical acquisition, virtual driver, game, WAN, video/audio. Each sample must arrive; a timeout fails the command instead of disappearing from percentiles."
