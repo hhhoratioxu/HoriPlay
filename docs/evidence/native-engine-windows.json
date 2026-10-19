@@ -1,0 +1,70 @@
+{
+  "phase": "Idle",
+  "error": null,
+  "input_error": null,
+  "invite": null,
+  "devices": [],
+  "selected": null,
+  "guest_name": null,
+  "peer_approved": false,
+  "remote": null,
+  "backend": null,
+  "path": {
+    "connected": false,
+    "local_candidate": "",
+    "remote_candidate": "",
+    "connection_type": ""
+  },
+  "rtt": {
+    "samples": 0,
+    "p50_ms": 0.0,
+    "p95_ms": 0.0,
+    "p99_ms": 0.0
+  },
+  "sample": {
+    "samples": 460,
+    "p50_ms": 0.009300000000000001,
+    "p95_ms": 0.0155,
+    "p99_ms": 0.0248
+  },
+  "serialization": {
+    "samples": 0,
+    "p50_ms": 0.0,
+    "p95_ms": 0.0,
+    "p99_ms": 0.0
+  },
+  "dispatch": {
+    "samples": 0,
+    "p50_ms": 0.0,
+    "p95_ms": 0.0,
+    "p99_ms": 0.0
+  },
+  "sent": 0,
+  "received": 0,
+  "rejected": 0,
+  "granted_slot": null,
+  "settings": {
+    "sticks": {
+      "dead_zone": 0.08,
+      "curve": 1.0,
+      "sensitivity": 1.0
+    },
+    "mapping": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ]
+  }
+}

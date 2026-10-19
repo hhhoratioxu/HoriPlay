@@ -50,3 +50,13 @@ CI and installer workflows are separate from runtime acceptance. Release BUILD f
 - Official USBip 0.9.8.1 x64 installer was downloaded only for review. Windows Authenticode reported **Valid**, signer **Cloudyne Systems (Scheibling Consulting AB)**, SHA256 `38cad6d4432b52d5bb9409d9ad03b72fdffc4ada4cd3a48fbeca1a2752a8518a`. This verifies the installer signature only. No driver installation, contained-driver verification or restart was performed.
 
 The first macOS CI desktop check failed because its bundled SDL resource was not prepared. CI was corrected to build the checksum-pinned runtime before checking the desktop; the failure was not counted as a passing Mac build.
+
+### Native input runtime lifetime check
+
+After the SDL main-thread lifetime change, the actual Windows `engine-test --seconds 2` completed with `input_error=null` and an empty real device list. The application worker collected 460 samples: poll-work P50 0.0093 ms / P95 0.0155 ms / P99 0.0248 ms. These empty-device work times are distinct from the earlier direct-poll run and do not measure physical input latency.
+
+Windows and macOS CI at commit `96d5e7db89e2636275d15c64288a1430e705378d` both compiled and executed that native engine command, with `input_error=null` and `devices=[]`. The public run is [39260065889](https://github.com/hhhoratioxu/HoriPlay/actions/runs/39260065889). This validates library loading, worker polling and lifetime cleanup on the runner, without claiming physical hardware acceptance.
+
+The first Windows installer build compiled the MSVC executable and NSIS setup, then failed on MSI's numeric prerelease-version restriction. The Windows config now maps `0.1.0-alpha.1` to MSI version `0.1.0.1`. The unpublished build was restarted after clearing rumble/freshness state for each new controller grant; final artifacts must name the corrected source commit in their BUILD records.
+
+The coturn deployment sample was statically checked against the 4.6.3 upstream options. The removed `no-loopback-peers` option is omitted; the upstream default denies loopback peers. Docker Compose was not executed on this PC because Docker is unavailable.

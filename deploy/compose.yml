@@ -27,6 +27,6 @@ services:
       - --fingerprint
       - --no-cli
       - --no-multicast-peers
-      - --no-loopback-peers
+      # coturn 4.6.3 rejects loopback peers by default; do not enable allow-loopback-peers.
       - --total-quota=32
       - --user-quota=8
