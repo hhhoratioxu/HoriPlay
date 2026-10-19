@@ -3,7 +3,7 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, watch, RwLock};
 use uuid::Uuid;
 use webrtc::{
     api::APIBuilder,
@@ -167,9 +167,64 @@ pub enum ServerMessage {
 
 #[derive(Debug)]
 pub enum PeerEvent {
-    Input(Vec<u8>),
-    Control(Vec<u8>),
+    Input(bytes::Bytes),
+    Control(bytes::Bytes),
     State(String),
+}
+/// Reliable events retain order; unreliable snapshots occupy one replaceable slot.
+/// A paused consumer resumes at current input instead of replaying a stale FIFO.
+pub struct PeerEvents {
+    ordered: mpsc::Receiver<PeerEvent>,
+    latest: watch::Receiver<Option<bytes::Bytes>>,
+    latest_open: bool,
+}
+impl PeerEvents {
+    pub async fn recv(&mut self) -> Option<PeerEvent> {
+        loop {
+            tokio::select! {
+                biased;
+                event = self.ordered.recv() => return event,
+                changed = self.latest.changed(), if self.latest_open => {
+                    if changed.is_err() { self.latest_open = false; continue; }
+                    if let Some(data) = self.latest.borrow_and_update().clone() { return Some(PeerEvent::Input(data)); }
+                }
+            }
+        }
+    }
+}
+
+/// Diagnostic-only peers with explicit loopback ICE candidates, using the production transport.
+pub async fn loopback_pair() -> Result<(Peer, PeerEvents, Peer, PeerEvents)> {
+    use std::time::Duration;
+    let (host, host_events, mut host_ice) = Peer::configured(true, vec![], false, true).await?;
+    let (guest, guest_events, mut guest_ice) = Peer::configured(false, vec![], false, true).await?;
+    let result = async {
+        let answer = guest
+            .apply(host.offer().await?)
+            .await?
+            .context("missing answer")?;
+        host.apply(answer).await?;
+        tokio::time::timeout(Duration::from_secs(20), async {
+            while !host.ready().await || !guest.ready().await {
+                tokio::select! {
+                    Some(candidate) = host_ice.recv() => { guest.apply(candidate).await?; },
+                    Some(candidate) = guest_ice.recv() => { host.apply(candidate).await?; },
+                    _ = tokio::time::sleep(Duration::from_millis(10)) => {},
+                }
+            }
+            Ok::<_, anyhow::Error>(())
+        })
+        .await??;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        Ok::<_, anyhow::Error>(())
+    }
+    .await;
+    if let Err(error) = result {
+        let _ = host.close().await;
+        let _ = guest.close().await;
+        return Err(error);
+    }
+    Ok((host, host_events, guest, guest_events))
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PathInfo {
@@ -217,8 +272,8 @@ pub async fn loopback_benchmark(samples: usize) -> Result<LoopbackEvidence> {
             let begin=Instant::now();
             if !guest.send(&packet,false).await?{skipped_congested+=1;tokio::time::sleep(Duration::from_millis(4)).await;continue;}
             let echo=tokio::time::timeout(Duration::from_millis(150),async{
-                loop{if let Some(PeerEvent::Input(bytes))=host_events.recv().await{if bytes==packet{host.send(&bytes,false).await?;break;}}}
-                loop{if let Some(PeerEvent::Input(bytes))=guest_events.recv().await{if bytes==packet{break;}}}Ok::<_,anyhow::Error>(())
+                loop{if let Some(PeerEvent::Input(bytes))=host_events.recv().await{if bytes.as_ref()==packet.as_slice(){host.send(&bytes,false).await?;break;}}}
+                loop{if let Some(PeerEvent::Input(bytes))=guest_events.recv().await{if bytes.as_ref()==packet.as_slice(){break;}}}Ok::<_,anyhow::Error>(())
             }).await;
             if let Ok(value)=echo{value?;times.push(begin.elapsed().as_secs_f64()*1000.0);}else{timed_out+=1;}
             tokio::time::sleep(Duration::from_millis(4)).await;
@@ -234,14 +289,14 @@ impl Peer {
     pub async fn new(
         host: bool,
         servers: Vec<RTCIceServer>,
-    ) -> Result<(Self, mpsc::Receiver<PeerEvent>, mpsc::Receiver<Signal>)> {
+    ) -> Result<(Self, PeerEvents, mpsc::Receiver<Signal>)> {
         Self::with_policy(host, servers, false).await
     }
     pub async fn with_policy(
         host: bool,
         servers: Vec<RTCIceServer>,
         relay_only: bool,
-    ) -> Result<(Self, mpsc::Receiver<PeerEvent>, mpsc::Receiver<Signal>)> {
+    ) -> Result<(Self, PeerEvents, mpsc::Receiver<Signal>)> {
         Self::configured(host, servers, relay_only, false).await
     }
     async fn configured(
@@ -249,7 +304,7 @@ impl Peer {
         servers: Vec<RTCIceServer>,
         relay_only: bool,
         loopback_only: bool,
-    ) -> Result<(Self, mpsc::Receiver<PeerEvent>, mpsc::Receiver<Signal>)> {
+    ) -> Result<(Self, PeerEvents, mpsc::Receiver<Signal>)> {
         use webrtc::peer_connection::policy::ice_transport_policy::RTCIceTransportPolicy;
         let mut settings = webrtc::api::setting_engine::SettingEngine::default();
         if loopback_only {
@@ -272,6 +327,7 @@ impl Peer {
                 .await?,
         );
         let (events, event_rx) = mpsc::channel(128);
+        let (latest, latest_rx) = watch::channel(None);
         let (signals, signal_rx) = mpsc::channel(128);
         pc.on_ice_candidate(Box::new(move |candidate| {
             let signals = signals.clone();
@@ -303,15 +359,15 @@ impl Peer {
                     }),
                 )
                 .await?;
-            attach(fast.clone(), events.clone(), false);
+            attach(fast.clone(), events.clone(), latest.clone(), false);
             *state.write().await = Some(fast);
             let reliable = pc.create_data_channel("hp-control-v1", None).await?;
-            attach(reliable.clone(), events.clone(), true);
+            attach(reliable.clone(), events.clone(), latest.clone(), true);
             *control.write().await = Some(reliable);
         } else {
             let (s, c) = (state.clone(), control.clone());
             pc.on_data_channel(Box::new(move |channel| {
-                let (s, c, events) = (s.clone(), c.clone(), events.clone());
+                let (s, c, events, latest) = (s.clone(), c.clone(), events.clone(), latest.clone());
                 Box::pin(async move {
                     match channel.label() {
                         "hp-state-v1" => {
@@ -320,7 +376,7 @@ impl Peer {
                                 let _ = channel.close().await;
                                 return;
                             }
-                            attach(channel.clone(), events, false);
+                            attach(channel.clone(), events, latest, false);
                             *s = Some(channel);
                         }
                         "hp-control-v1" => {
@@ -329,7 +385,7 @@ impl Peer {
                                 let _ = channel.close().await;
                                 return;
                             }
-                            attach(channel.clone(), events, true);
+                            attach(channel.clone(), events, latest, true);
                             *c = Some(channel);
                         }
                         _ => {
@@ -346,7 +402,11 @@ impl Peer {
                 control,
                 pending_candidates: tokio::sync::Mutex::new(Vec::new()),
             },
-            event_rx,
+            PeerEvents {
+                ordered: event_rx,
+                latest: latest_rx,
+                latest_open: true,
+            },
             signal_rx,
         ))
     }
@@ -450,10 +510,16 @@ impl Peer {
         Ok(())
     }
 }
-fn attach(channel: Arc<RTCDataChannel>, events: mpsc::Sender<PeerEvent>, reliable: bool) {
+fn attach(
+    channel: Arc<RTCDataChannel>,
+    events: mpsc::Sender<PeerEvent>,
+    latest: watch::Sender<Option<bytes::Bytes>>,
+    reliable: bool,
+) {
     let weak = Arc::downgrade(&channel);
     channel.on_message(Box::new(move |message: DataChannelMessage| {
         let events = events.clone();
+        let latest = latest.clone();
         let weak = weak.clone();
         Box::pin(async move {
             if message.data.len() > 8192 {
@@ -462,13 +528,17 @@ fn attach(channel: Arc<RTCDataChannel>, events: mpsc::Sender<PeerEvent>, reliabl
                 }
                 return;
             }
-            let data = message.data.to_vec();
-            let event = if !reliable || data.starts_with(b"HP\x01") {
+            let data = message.data;
+            if !reliable {
+                latest.send_replace(Some(data));
+                return;
+            }
+            let event = if data.starts_with(b"HP\x01") {
                 PeerEvent::Input(data)
             } else {
                 PeerEvent::Control(data)
             };
-            if events.try_send(event).is_err() && reliable {
+            if events.try_send(event).is_err() {
                 if let Some(ch) = weak.upgrade() {
                     let _ = ch.close().await;
                 }
@@ -481,6 +551,76 @@ fn attach(channel: Arc<RTCDataChannel>, events: mpsc::Sender<PeerEvent>, reliabl
 mod tests {
     use super::*;
     use std::time::Duration;
+    #[tokio::test]
+    async fn latest_snapshot_replaces_backlog_without_displacing_reliable_input() {
+        let (ordered_tx, ordered) = mpsc::channel(4);
+        let (latest_tx, latest) = watch::channel(None);
+        let mut events = PeerEvents {
+            ordered,
+            latest,
+            latest_open: true,
+        };
+        for n in 0u8..100 {
+            latest_tx.send_replace(Some(bytes::Bytes::copy_from_slice(&[n])));
+        }
+        ordered_tx
+            .send(PeerEvent::Input(bytes::Bytes::from_static(
+                b"button-release",
+            )))
+            .await
+            .unwrap();
+        match events.recv().await.unwrap() {
+            PeerEvent::Input(data) => assert_eq!(data.as_ref(), b"button-release"),
+            event => panic!("unexpected {event:?}"),
+        }
+        match events.recv().await.unwrap() {
+            PeerEvent::Input(data) => assert_eq!(data.as_ref(), &[99]),
+            event => panic!("unexpected {event:?}"),
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), events.recv())
+                .await
+                .is_err()
+        );
+        // Closure of the fast path must not spin or discard later reliable lifecycle events.
+        drop(latest_tx);
+        ordered_tx
+            .send(PeerEvent::State("closed".into()))
+            .await
+            .unwrap();
+        assert!(matches!(events.recv().await, Some(PeerEvent::State(_))));
+    }
+    #[tokio::test]
+    async fn a_paused_webrtc_consumer_resumes_at_the_latest_snapshot() {
+        let (host, mut events, guest, _guest_events) = loopback_pair().await.unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(5), async {
+            for n in 0u8..20 {
+                while !guest.send(&[n], false).await.unwrap() {
+                    tokio::time::sleep(Duration::from_millis(2)).await;
+                }
+                tokio::time::sleep(Duration::from_millis(2)).await;
+            }
+            // The application has deliberately not called recv during this burst.
+            while events.latest.borrow().as_ref().map(|b| b.as_ref() == [19]) != Some(true) {
+                tokio::time::sleep(Duration::from_millis(2)).await;
+            }
+            loop {
+                if let Some(PeerEvent::Input(bytes)) = events.recv().await {
+                    assert_eq!(bytes.as_ref(), &[19]);
+                    break;
+                }
+            }
+            assert!(
+                tokio::time::timeout(Duration::from_millis(20), events.recv())
+                    .await
+                    .is_err()
+            );
+        })
+        .await;
+        host.close().await.unwrap();
+        guest.close().await.unwrap();
+        result.unwrap();
+    }
     #[tokio::test]
     async fn high_frequency_snapshots_do_not_starve_after_dcep() {
         let result = loopback_benchmark(50).await.unwrap();
@@ -565,7 +705,7 @@ mod tests {
             let answer=b.apply(a.offer().await.unwrap()).await.unwrap().unwrap();a.apply(answer).await.unwrap();
             while !a.ready().await||!b.ready().await{tokio::select!{Some(c)=ai.recv()=>{b.apply(c).await.unwrap();},Some(c)=bi.recv()=>{a.apply(c).await.unwrap();},_=tokio::time::sleep(Duration::from_millis(20))=>{}}}
             assert_eq!(a.path().await.connection_type,"TURN Relay");b.send(b"turn-confirmed",true).await.unwrap();
-            loop{if let Some(PeerEvent::Control(v))=ar.recv().await{assert_eq!(v,b"turn-confirmed");break;}}
+            loop{if let Some(PeerEvent::Control(v))=ar.recv().await{assert_eq!(v.as_ref(),b"turn-confirmed");break;}}
         }).await;
         let _ = a.close().await;
         let _ = b.close().await;
@@ -583,8 +723,8 @@ mod tests {
             while !a.ready().await||!b.ready().await {tokio::select!{Some(c)=a_ice.recv()=>{println!("host ICE {c:?}");b.apply(c).await.unwrap();},Some(c)=b_ice.recv()=>{println!("guest ICE {c:?}");a.apply(c).await.unwrap();},Some(e)=a_rx.recv()=>println!("host event {e:?}"),Some(e)=b_rx.recv()=>println!("guest event {e:?}"),_=tokio::time::sleep(Duration::from_millis(20))=>{}}}
             println!("Both data channels ready; selected path: {:?}",a.path().await);
             b.send(b"reliable",true).await.unwrap();
-            let(mut fast,mut reliable)=(false,false);while !fast||!reliable{tokio::select!{Some(event)=a_rx.recv()=>{println!("received {event:?}");match event{PeerEvent::Input(v)=>{assert_eq!(v,b"HP\x01fast");fast=true;},PeerEvent::Control(v)=>{assert_eq!(v,b"reliable");reliable=true;},_=>{}}},_=tokio::time::sleep(Duration::from_millis(30))=>{println!("send snapshot: {}",b.send(b"HP\x01fast",false).await.unwrap());}}}
-            a.send(b"return",true).await.unwrap();loop{if let PeerEvent::Control(v)=b_rx.recv().await.unwrap(){assert_eq!(v,b"return");break;}}
+            let(mut fast,mut reliable)=(false,false);while !fast||!reliable{tokio::select!{Some(event)=a_rx.recv()=>{println!("received {event:?}");match event{PeerEvent::Input(v)=>{assert_eq!(v.as_ref(),b"HP\x01fast");fast=true;},PeerEvent::Control(v)=>{assert_eq!(v.as_ref(),b"reliable");reliable=true;},_=>{}}},_=tokio::time::sleep(Duration::from_millis(30))=>{println!("send snapshot: {}",b.send(b"HP\x01fast",false).await.unwrap());}}}
+            a.send(b"return",true).await.unwrap();loop{if let PeerEvent::Control(v)=b_rx.recv().await.unwrap(){assert_eq!(v.as_ref(),b"return");break;}}
             assert!(a.path().await.connected);
         }).await;
         a.close().await.unwrap();

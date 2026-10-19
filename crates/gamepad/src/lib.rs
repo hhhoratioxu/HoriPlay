@@ -7,12 +7,16 @@ use std::{
     ffi::{c_char, c_void, CStr},
     path::{Path, PathBuf},
     sync::Arc,
+    time::{Duration, Instant},
 };
 
 type Handle = *mut c_void;
 pub struct SdlGamepads {
     api: Arc<Api>,
     handles: HashMap<u32, Handle>,
+    devices: Vec<PadInfo>,
+    next_discovery: Instant,
+    next_metadata: Instant,
     _runtime: SdlRuntime,
 }
 /// Initialize on the application main thread. Keep a reference there until samplers stop.
@@ -137,89 +141,112 @@ impl SdlRuntime {
         SdlGamepads {
             api: self.0.api.clone(),
             handles: HashMap::new(),
+            devices: Vec::new(),
+            next_discovery: Instant::now(),
+            next_metadata: Instant::now(),
             _runtime: self.clone(),
         }
     }
 }
 impl SdlGamepads {
     pub fn poll(&mut self) -> Result<Vec<PadInfo>> {
+        Ok(self.poll_cached()?.to_vec())
+    }
+    /// Reuse device metadata/storage. The returned state stays raw (before remapping).
+    pub fn poll_cached(&mut self) -> Result<&[PadInfo]> {
         // SAFETY: owned SDL pointers are only accessed on this object's original thread.
         unsafe {
             (self.api.update)();
-            let mut count = 0;
-            let ids = (self.api.list)(&mut count);
-            if ids.is_null() {
-                bail!("SDL_GetGamepads: {}", read_string((self.api.error)()));
-            }
-            let found = std::slice::from_raw_parts(ids, count.max(0) as usize).to_vec();
-            (self.api.free)(ids.cast());
-            self.handles.retain(|id, pad| {
-                if !found.contains(id) || !(self.api.connected)(*pad) {
+            let now = Instant::now();
+            // Check existing handles every sample, so unplug does not wait for discovery.
+            self.handles.retain(|_, pad| {
+                if !(self.api.connected)(*pad) {
                     (self.api.close)(*pad);
                     false
                 } else {
                     true
                 }
             });
-            for id in found {
-                self.handles
-                    .entry(id)
-                    .or_insert_with(|| (self.api.open)(id));
+            self.devices
+                .retain(|pad| self.handles.contains_key(&pad.id));
+            if now >= self.next_discovery {
+                let mut count = 0;
+                let ids = (self.api.list)(&mut count);
+                if ids.is_null() {
+                    bail!("SDL_GetGamepads: {}", read_string((self.api.error)()));
+                }
+                let found = std::slice::from_raw_parts(ids, count.max(0) as usize);
+                for &id in found {
+                    if self.handles.contains_key(&id) {
+                        continue;
+                    }
+                    let pad = (self.api.open)(id);
+                    if pad.is_null() {
+                        continue;
+                    }
+                    self.handles.insert(id, pad);
+                    self.devices.push(PadInfo {
+                        id,
+                        name: read_string((self.api.name)(pad)),
+                        vendor: (self.api.vendor)(pad),
+                        product: (self.api.product)(pad),
+                        connection: String::new(),
+                        power: String::new(),
+                        battery_percent: None,
+                        rumble: false,
+                        trigger_rumble: false,
+                        state: PadState::default(),
+                    });
+                    self.next_metadata = now;
+                }
+                (self.api.free)(ids.cast());
+                self.devices.sort_by_key(|pad| pad.id);
+                self.next_discovery = now + Duration::from_millis(100);
             }
-            self.handles.retain(|_, p| !p.is_null());
-            let mut result = Vec::new();
-            for (id, pad) in &self.handles {
-                let props = (self.api.props)(*pad);
-                let mut percent = -1;
-                let power = (self.api.power)(*pad, &mut percent);
-                let state = PadState {
-                    buttons: (0..15).fold(0, |b, i| {
-                        b | if (self.api.button)(*pad, i) {
-                            1 << i
-                        } else {
-                            0
-                        }
-                    }),
-                    axes: std::array::from_fn(|i| (self.api.axis)(*pad, i as i32)),
-                    triggers: std::array::from_fn(|i| {
-                        (self.api.axis)(*pad, 4 + i as i32).max(0) as u16
-                    }),
-                };
-                result.push(PadInfo {
-                    id: *id,
-                    name: read_string((self.api.name)(*pad)),
-                    vendor: (self.api.vendor)(*pad),
-                    product: (self.api.product)(*pad),
-                    connection: match (self.api.connection)(*pad) {
+            let refresh_metadata = now >= self.next_metadata;
+            for info in &mut self.devices {
+                let pad = self.handles[&info.id];
+                if refresh_metadata {
+                    let props = (self.api.props)(pad);
+                    let mut percent = -1;
+                    let power = (self.api.power)(pad, &mut percent);
+                    info.connection = match (self.api.connection)(pad) {
                         1 => "USB / wired",
                         2 => "Wireless (transport reported by SDL)",
                         _ => "Unknown",
                     }
-                    .into(),
-                    power: match power {
+                    .into();
+                    info.power = match power {
                         1 => "On battery",
                         2 => "No battery",
                         3 => "Charging",
                         4 => "Charged",
                         _ => "Unknown",
                     }
-                    .into(),
-                    battery_percent: if (0..=100).contains(&percent) {
-                        Some(percent)
-                    } else {
-                        None
-                    },
-                    rumble: (self.api.boolean)(props, c"SDL.gamepad.cap.rumble".as_ptr(), false),
-                    trigger_rumble: (self.api.boolean)(
+                    .into();
+                    info.battery_percent = (0..=100).contains(&percent).then_some(percent);
+                    info.rumble =
+                        (self.api.boolean)(props, c"SDL.gamepad.cap.rumble".as_ptr(), false);
+                    info.trigger_rumble = (self.api.boolean)(
                         props,
                         c"SDL.gamepad.cap.trigger_rumble".as_ptr(),
                         false,
-                    ),
-                    state,
-                });
+                    );
+                }
+                info.state = PadState {
+                    buttons: (0..15).fold(0, |b, i| {
+                        b | if (self.api.button)(pad, i) { 1 << i } else { 0 }
+                    }),
+                    axes: std::array::from_fn(|i| (self.api.axis)(pad, i as i32)),
+                    triggers: std::array::from_fn(|i| {
+                        (self.api.axis)(pad, 4 + i as i32).max(0) as u16
+                    }),
+                };
             }
-            result.sort_by_key(|p| p.id);
-            Ok(result)
+            if refresh_metadata {
+                self.next_metadata = now + Duration::from_secs(1);
+            }
+            Ok(&self.devices)
         }
     }
     pub fn rumble(&self, id: u32, low: u16, high: u16, milliseconds: u32) -> Result<()> {

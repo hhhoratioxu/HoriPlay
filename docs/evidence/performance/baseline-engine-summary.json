@@ -1,0 +1,52 @@
+{
+  "label": "baseline",
+  "captured_at_utc": "2026-10-19T15:54:30.9835031Z",
+  "executable_sha256": "6664220ce3ecd8870262d48e06d9ccd9f1f1ce0e5f8b4cbf89ec78036c89cb58",
+  "seconds_per_run": 12,
+  "logical_processors": 20,
+  "runs": [
+    {
+      "run": 1,
+      "wall_seconds": 12.5929972,
+      "cpu_ms": 156.25,
+      "cpu_percent_of_one_core": 1.2407689568929627,
+      "peak_working_set_bytes": 28196864,
+      "physical_devices": 0,
+      "poll_work": {
+        "samples": 512,
+        "p50_ms": 0.0033,
+        "p95_ms": 0.0066,
+        "p99_ms": 0.0088
+      }
+    },
+    {
+      "run": 2,
+      "wall_seconds": 12.1872988,
+      "cpu_ms": 187.5,
+      "cpu_percent_of_one_core": 1.5384869369084475,
+      "peak_working_set_bytes": 15953920,
+      "physical_devices": 0,
+      "poll_work": {
+        "samples": 512,
+        "p50_ms": 0.0033,
+        "p95_ms": 0.0062,
+        "p99_ms": 0.0083
+      }
+    },
+    {
+      "run": 3,
+      "wall_seconds": 12.1890384,
+      "cpu_ms": 125.0,
+      "cpu_percent_of_one_core": 1.02551157768114,
+      "peak_working_set_bytes": 16388096,
+      "physical_devices": 0,
+      "poll_work": {
+        "samples": 512,
+        "p50_ms": 0.0031,
+        "p95_ms": 0.006,
+        "p99_ms": 0.0081
+      }
+    }
+  ],
+  "scope": "Real native SDL engine process; no synthetic devices, no session, no virtual driver. CPU is percent of one logical core, includes startup/shutdown. Empty-device results do not measure active-controller or game latency."
+}

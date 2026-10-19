@@ -49,10 +49,24 @@ enum Command {
         #[arg(long, default_value_t = 300)]
         samples: usize,
     },
+    /// Synthetic sample-to-authorized-receiver timing over real loopback WebRTC; no OS input.
+    InputBench {
+        #[arg(long, default_value_t = 500)]
+        samples: usize,
+        /// Compare only the former 8 ms polling gate with the production event-driven sender.
+        #[arg(long)]
+        poll_8ms: bool,
+    },
 }
 #[tokio::main]
 async fn main() -> Result<()> {
     match Args::parse().command {
+        Command::InputBench { samples, poll_8ms } => println!(
+            "{}",
+            serde_json::to_string_pretty(
+                &horiplay_session::performance::input_benchmark(samples, poll_8ms).await?
+            )?
+        ),
         Command::EngineTest { seconds } => {
             let engine = Engine::new();
             tokio::time::sleep(Duration::from_secs(seconds)).await;

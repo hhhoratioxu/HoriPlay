@@ -2,7 +2,9 @@
 
 **原生远程手柄输入工程 Alpha · v0.1.0-alpha.1**
 
-[English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [驱动调研](docs/VIRTUAL-GAMEPAD.md) · [运行指南](docs/GETTING-STARTED.md) · [验收记录](docs/VALIDATION.md)
+[English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [驱动调研](docs/VIRTUAL-GAMEPAD.md) · [运行指南](docs/GETTING-STARTED.md) · [验收记录](docs/VALIDATION.md) · [输入性能实测](docs/PERFORMANCE.md)
+
+main 新增输入性能优化：移除 8 ms 发送等待、只保留最新连续状态、缓存设备信息。调度对照数据及 CPU 未显著改善的测量边界见上述性能记录。已发布的 alpha.1 安装包不包含这些后续改动。
 
 下载：[v0.1.0-alpha.1 Release](https://github.com/hhhoratioxu/HoriPlay/releases/tag/v0.1.0-alpha.1) · [Windows EXE](https://github.com/hhhoratioxu/HoriPlay/releases/download/v0.1.0-alpha.1/HoriPlay-windows-x64-setup.exe) · [Windows MSI](https://github.com/hhhoratioxu/HoriPlay/releases/download/v0.1.0-alpha.1/HoriPlay-windows-x64.msi) · [Apple Silicon DMG](https://github.com/hhhoratioxu/HoriPlay/releases/download/v0.1.0-alpha.1/HoriPlay-macos-arm64.dmg) · [Intel DMG](https://github.com/hhhoratioxu/HoriPlay/releases/download/v0.1.0-alpha.1/HoriPlay-macos-x64.dmg)。应用安装包未签名，macOS 未公证；仅 Windows EXE 执行了安装启动检查。
 

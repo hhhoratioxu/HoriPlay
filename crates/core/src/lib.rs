@@ -185,6 +185,35 @@ pub fn percentiles(values: &[f64]) -> Percentiles {
     }
 }
 
+/// Bounded measurements with constant-time recording. Summarize away from the input hot path.
+pub struct TimingWindow<const N: usize> {
+    values: [f64; N],
+    next: usize,
+    len: usize,
+}
+impl<const N: usize> Default for TimingWindow<N> {
+    fn default() -> Self {
+        assert!(N > 0);
+        Self {
+            values: [0.0; N],
+            next: 0,
+            len: 0,
+        }
+    }
+}
+impl<const N: usize> TimingWindow<N> {
+    pub fn record(&mut self, milliseconds: f64) {
+        if milliseconds.is_finite() && milliseconds >= 0.0 {
+            self.values[self.next] = milliseconds;
+            self.next = (self.next + 1) % N;
+            self.len = (self.len + 1).min(N);
+        }
+    }
+    pub fn summary(&self) -> Percentiles {
+        percentiles(&self.values[..self.len])
+    }
+}
+
 /// A heartbeat cannot preserve a stale input state: only fresh accepted reports refresh this timer.
 pub struct Watchdog {
     last: Option<Instant>,
@@ -216,6 +245,29 @@ impl Watchdog {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn timing_window_retains_recent_finite_samples() {
+        let mut window = TimingWindow::<4>::default();
+        assert_eq!(window.summary().samples, 0);
+        for value in [
+            100.0,
+            200.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+            f64::NAN,
+            f64::INFINITY,
+            -1.0,
+        ] {
+            window.record(value);
+        }
+        let summary = window.summary();
+        assert_eq!(summary.samples, 4);
+        assert_eq!(summary.p50_ms, 4.0);
+        assert_eq!(summary.p95_ms, 6.0);
+        assert_eq!(summary.p99_ms, 6.0);
+    }
     #[test]
     fn analog_is_analog() {
         let c = AxisSettings {

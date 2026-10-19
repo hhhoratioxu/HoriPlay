@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use futures_util::{SinkExt, StreamExt};
-use horiplay_core::{percentiles, InputSettings, Owner, PadInfo, Percentiles, Watchdog};
+use horiplay_core::{InputSettings, Owner, PadInfo, Percentiles, TimingWindow, Watchdog};
 use horiplay_gamepad::{SdlGamepads, SdlRuntime};
 use horiplay_input_transport::{InputPacket, Receiver};
 use horiplay_networking::{
@@ -18,6 +18,9 @@ use std::{
 };
 use tokio::sync::mpsc;
 use webrtc::ice_transport::ice_server::RTCIceServer;
+mod input;
+pub mod performance;
+use input::{GuestInput, InputFeed, Sample};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -64,6 +67,8 @@ pub struct Snapshot {
     pub rtt: Percentiles,
     pub sample: Percentiles,
     pub serialization: Percentiles,
+    pub input_wait: Percentiles,
+    pub sampler_work: Percentiles,
     pub dispatch: Percentiles,
     pub sent: u64,
     pub received: u64,
@@ -87,6 +92,7 @@ pub struct Engine {
     snapshot: Arc<Mutex<Snapshot>>,
     actions: tokio::sync::Mutex<Option<mpsc::Sender<Action>>>,
     input: std::sync::mpsc::SyncSender<InputAction>,
+    feed: Arc<InputFeed>,
     stopped: Arc<AtomicBool>,
     worker: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
     _sdl: Option<SdlRuntime>,
@@ -102,6 +108,7 @@ impl Engine {
             ..Default::default()
         }));
         let (tx, rx) = std::sync::mpsc::sync_channel(16);
+        let feed = Arc::new(InputFeed::default());
         let stopped = Arc::new(AtomicBool::new(false));
         let (state, stop) = (snapshot.clone(), stopped.clone());
         // Engine is constructed in Tauri setup / the CLI's main-thread entry point.
@@ -118,21 +125,25 @@ impl Engine {
         };
         let worker = runtime.as_ref().map(|runtime| {
             let factory = runtime.clone();
+            let feed = feed.clone();
             std::thread::spawn(move || {
                 let result = (|| -> Result<()> {
                     let mut pads = factory.open();
-                    let mut timings = Vec::new();
+                    let mut timings = TimingWindow::<512>::default();
+                    let mut work = TimingWindow::<512>::default();
+                    let mut next_ui = Instant::now();
+                    let mut next_metrics = Instant::now();
+                    let mut next_poll = Instant::now();
+                    let mut selected_name: Option<(u32, Arc<str>)> = None;
                     while !stop.load(Ordering::Relaxed) {
                         let start = Instant::now();
                         while let Ok(InputAction::Rumble(id, rumble)) = rx.try_recv() {
                             let _ = pads.rumble(id, rumble.low, rumble.high, rumble.duration_ms);
                         }
-                        let devices = pads.poll()?;
-                        timings.push(start.elapsed().as_secs_f64() * 1000.0);
-                        if timings.len() > 512 {
-                            timings.remove(0);
-                        }
-                        {
+                        let devices = pads.poll_cached()?;
+                        let captured = Instant::now();
+                        timings.record(start.elapsed().as_secs_f64() * 1000.0);
+                        let (selected, settings) = {
                             let mut s = state.lock().unwrap();
                             if s.selected
                                 .is_some_and(|id| !devices.iter().any(|p| p.id == id))
@@ -142,16 +153,54 @@ impl Engine {
                             if s.selected.is_none() {
                                 s.selected = devices.first().map(|p| p.id);
                             }
-                            s.devices = devices;
-                            s.sample = percentiles(&timings);
+                            let topology_changed = s.devices.len() != devices.len()
+                                || s.devices.iter().zip(devices).any(|(a, b)| a.id != b.id);
+                            if captured >= next_ui || topology_changed {
+                                if s.devices.len() == devices.len() {
+                                    s.devices.clone_from_slice(devices);
+                                } else {
+                                    s.devices = devices.to_vec();
+                                }
+                                next_ui = captured + Duration::from_millis(33);
+                            }
+                            (s.selected, s.settings.clone())
+                        };
+                        let sample = selected
+                            .and_then(|id| devices.iter().find(|p| p.id == id))
+                            .map(|pad| {
+                                if selected_name.as_ref().map(|(id, _)| *id) != Some(pad.id) {
+                                    selected_name = Some((pad.id, Arc::from(pad.name.as_str())));
+                                }
+                                Sample {
+                                    id: pad.id,
+                                    name: selected_name.as_ref().unwrap().1.clone(),
+                                    state: settings.apply(pad.state),
+                                    captured,
+                                }
+                            });
+                        feed.publish(sample);
+                        work.record(start.elapsed().as_secs_f64() * 1000.0);
+                        if captured >= next_metrics {
+                            // Sorting is infrequent and never holds the shared UI/input lock.
+                            let (sample, sampler_work) = (timings.summary(), work.summary());
+                            let mut s = state.lock().unwrap();
+                            s.sample = sample;
+                            s.sampler_work = sampler_work;
+                            next_metrics = captured + Duration::from_millis(100);
                         }
-                        std::thread::sleep(
-                            Duration::from_millis(4).saturating_sub(start.elapsed()),
-                        );
+                        // No high-rate empty polling or busy spinning. Discovery is ~100 ms
+                        // plus the current sampler period and OS scheduling jitter.
+                        let period = Duration::from_millis(if devices.is_empty() { 16 } else { 4 });
+                        next_poll += period;
+                        if next_poll <= Instant::now() {
+                            next_poll = Instant::now() + period;
+                        }
+                        std::thread::sleep(next_poll.saturating_duration_since(Instant::now()));
                     }
                     Ok(())
                 })();
                 if let Err(e) = result {
+                    feed.publish(None);
                     let mut s = state.lock().unwrap();
                     s.devices.clear();
                     s.input_error = Some(format!("{e:#}"));
@@ -162,6 +211,7 @@ impl Engine {
             snapshot,
             actions: tokio::sync::Mutex::new(None),
             input: tx,
+            feed,
             stopped,
             worker: std::sync::Mutex::new(worker),
             _sdl: runtime,
@@ -211,7 +261,9 @@ impl Engine {
         };
         let (tx, rx) = mpsc::channel(16);
         *actions = Some(tx);
-        let (snapshot, input) = (self.snapshot.clone(), self.input.clone());
+        let (snapshot, input, feed) =
+            (self.snapshot.clone(), self.input.clone(), self.feed.clone());
+        feed.arm(false);
         {
             let mut s = snapshot.lock().unwrap();
             s.phase = "Connecting signaling".into();
@@ -227,9 +279,22 @@ impl Engine {
             s.received = 0;
             s.rejected = 0;
             s.rtt = Default::default();
+            s.serialization = Default::default();
+            s.dispatch = Default::default();
+            s.input_wait = Default::default();
         }
         tokio::spawn(async move {
-            let result = run(config, invite, host, snapshot.clone(), input, rx).await;
+            let result = run(
+                config,
+                invite,
+                host,
+                snapshot.clone(),
+                input,
+                feed.clone(),
+                rx,
+            )
+            .await;
+            feed.arm(false);
             let mut s = snapshot.lock().unwrap();
             s.phase = "Stopped".into();
             s.peer_approved = false;
@@ -319,6 +384,7 @@ async fn run(
     host: bool,
     snapshot: Arc<Mutex<Snapshot>>,
     input: std::sync::mpsc::SyncSender<InputAction>,
+    feed: Arc<InputFeed>,
     mut actions: mpsc::Receiver<Action>,
 ) -> Result<()> {
     let (mut ws, _) = tokio_tungstenite::connect_async(&config.signaling)
@@ -355,14 +421,16 @@ async fn run(
     let mut backend: Option<Viiper> = None;
     let mut watchdog = Watchdog::new(Duration::from_millis(250));
     let mut grant: Option<(u32, u8)> = None;
-    let mut tick = tokio::time::interval(Duration::from_millis(8));
+    let mut tick = tokio::time::interval(Duration::from_millis(if host { 8 } else { 50 }));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut maintenance = tokio::time::interval(Duration::from_secs(1));
     let mut heart = tokio::time::interval(Duration::from_secs(10));
-    let (mut announced, mut last_buttons) = (None, None);
+    let mut guest_input = GuestInput::default();
     let start = Instant::now();
-    let mut sequence = 0u64;
-    let (mut rtts, mut serial, mut dispatch) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut rtts, mut dispatch) = (
+        TimingWindow::<1024>::default(),
+        TimingWindow::<1024>::default(),
+    );
     let mut outstanding_ping = None;
     let mut approved = false;
     let mut last_rumble = None::<Rumble>;
@@ -415,7 +483,7 @@ if let Some(answer)=peer.apply(auth.verify(signal)?).await?{let signal=auth.sign
                 PeerEvent::Input(data) if host=>{
                     let decoded=InputPacket::decode(&data);let accepted=decoded.and_then(|p|receiver.accept(p));
                     match accepted {
-                        Ok(state)=>{if let Some(device)=backend.as_mut(){let begin=Instant::now();device.update(state)?;push(&mut dispatch,begin.elapsed().as_secs_f64()*1000.0);watchdog.accepted(Instant::now());snapshot.lock().unwrap().received+=1;}},
+                        Ok(state)=>{if let Some(device)=backend.as_mut(){let begin=Instant::now();device.update(state)?;dispatch.record(begin.elapsed().as_secs_f64()*1000.0);watchdog.accepted(Instant::now());snapshot.lock().unwrap().received+=1;}},
                         Err(_)=>{snapshot.lock().unwrap().rejected+=1;}
                     }
                 },
@@ -433,19 +501,23 @@ if let Some(mut device)=backend.take(){device.neutralize()?;}let mut s=snapshot.
                             let mut s=snapshot.lock().unwrap();s.remote=None;s.backend=None;s.granted_slot=None;
                         },
                         Control::Grant{id,slot} if !host&&slot<4=>{
-                            if announced!=Some(id){bail!("host granted an unknown controller");}grant=Some((id,slot));snapshot.lock().unwrap().granted_slot=Some(slot);last_buttons=None;
+                            if guest_input.announced!=Some(id){bail!("host granted an unknown controller");}grant=Some((id,slot));snapshot.lock().unwrap().granted_slot=Some(slot);guest_input.new_grant();feed.arm(true);
                         },
-                        Control::Revoke if !host=>{if let Some((id,_))=grant.take(){let _=input.try_send(InputAction::Rumble(id,Rumble{low:0,high:0,duration_ms:0}));}snapshot.lock().unwrap().granted_slot=None;},
+                        Control::Revoke if !host=>{feed.arm(false);if let Some((id,_))=grant.take(){let _=input.try_send(InputAction::Rumble(id,Rumble{low:0,high:0,duration_ms:0}));}snapshot.lock().unwrap().granted_slot=None;},
                         Control::Rumble{id,value} if !host&&grant.is_some_and(|(current,_)|current==id)=>{
                             let capable=snapshot.lock().unwrap().devices.iter().any(|p|p.id==id&&p.rumble);
                             if capable{let _=input.try_send(InputAction::Rumble(id,Rumble{duration_ms:value.duration_ms.min(250),..value}));}
                         },
                         Control::Ping{nonce}=>{control(&peer,&Control::Pong{nonce}).await?;},
-                        Control::Pong{nonce}=>{if let Some((expected,sent))=outstanding_ping{if nonce==expected{push(&mut rtts,Instant::now().duration_since(sent).as_secs_f64()*1000.0);outstanding_ping=None;}}},
+                        Control::Pong{nonce}=>{if let Some((expected,sent))=outstanding_ping{if nonce==expected{rtts.record(Instant::now().duration_since(sent).as_secs_f64()*1000.0);outstanding_ping=None;}}},
                         _=>{}
                     }
                 },
                 _=>{}
+            },
+            _=feed.changed.notified(), if !host=>{
+                let sent=guest_input.flush(&peer,&feed,invite.room,&mut grant).await?;
+                let mut s=snapshot.lock().unwrap();s.sent+=sent;s.granted_slot=grant.map(|(_,slot)|slot);
             },
             _=tick.tick()=>{
                 if host {
@@ -455,27 +527,16 @@ if let Some(mut device)=backend.take(){device.neutralize()?;}let mut s=snapshot.
                         if let(Some((id,_)),Some(rumble))=(grant,last_rumble){if last_rumble_at.elapsed()>=Duration::from_millis(100){control(&peer,&Control::Rumble{id,value:rumble}).await?;last_rumble_at=Instant::now();if rumble.low==0&&rumble.high==0{last_rumble=None;}}}
                         snapshot.lock().unwrap().backend=Some(device.status());
                     }
-                }else if peer.ready().await{
-                    let s=snapshot.lock().unwrap().clone();let selected=s.selected.and_then(|id|s.devices.iter().find(|p|p.id==id));
-                    if selected.map(|p|p.id)!=announced{
-                        if let Some(id)=announced{control(&peer,&Control::Disconnect{id}).await?;}
-                        grant=None;snapshot.lock().unwrap().granted_slot=None;last_buttons=None;
-                        if let Some(p)=selected{control(&peer,&Control::Connect{id:p.id,name:p.name.clone()}).await?;}announced=selected.map(|p|p.id);
-                    }
-                    if let (Some(p),Some((id,slot)))=(selected,grant){if id==p.id{
-                        let begin=Instant::now();sequence+=1;let state=s.settings.apply(p.state);
-                        let bytes=InputPacket{session:invite.room,controller:id,slot,sequence,timestamp_us:start.elapsed().as_micros() as u64,state}.encode();
-                        push(&mut serial,begin.elapsed().as_secs_f64()*1000.0);
-                        // Reliable full states accompany button edges. Both paths share the sequence guard.
-                        if last_buttons!=Some(state.buttons){if !peer.send(&bytes,true).await?{bail!("button edge could not be sent");}last_buttons=Some(state.buttons);}
-                        if peer.send(&bytes,false).await?{snapshot.lock().unwrap().sent+=1;}
-                    }}
+                }else{
+                    let sent=guest_input.flush(&peer,&feed,invite.room,&mut grant).await?;
+                    let mut s=snapshot.lock().unwrap();s.sent+=sent;s.granted_slot=grant.map(|(_,slot)|slot);
                 }
             },
             _=maintenance.tick()=>{
                 let path=peer.path().await;
                 if peer.ready().await{let nonce=start.elapsed().as_micros() as u64;if outstanding_ping.is_none(){outstanding_ping=Some((nonce,Instant::now()));control(&peer,&Control::Ping{nonce}).await?;}}
-                let mut s=snapshot.lock().unwrap();s.path=path;s.rtt=percentiles(&rtts);s.serialization=percentiles(&serial);s.dispatch=percentiles(&dispatch);
+                let (rtt,serialization,dispatch,input_wait)=(rtts.summary(),guest_input.serialization.summary(),dispatch.summary(),guest_input.wait.summary());
+                let mut s=snapshot.lock().unwrap();s.path=path;s.rtt=rtt;s.serialization=serialization;s.dispatch=dispatch;s.input_wait=input_wait;
             },
             _=heart.tick()=>{ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::to_string(&ClientMessage::Heartbeat)?.into())).await?;},
         }}Ok::<_,anyhow::Error>(())
@@ -498,12 +559,6 @@ if let Some(mut device)=backend.take(){device.neutralize()?;}let mut s=snapshot.
     let _ = ws.close(None).await;
     let _ = peer.close().await;
     result
-}
-fn push(values: &mut Vec<f64>, v: f64) {
-    if values.len() >= 1024 {
-        values.remove(0);
-    }
-    values.push(v);
 }
 
 #[cfg(test)]
