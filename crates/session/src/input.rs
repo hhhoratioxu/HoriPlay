@@ -77,6 +77,7 @@ impl InputFeed {
 
 pub(crate) struct GuestInput {
     pub announced: Option<u32>,
+    pub retry_pending: bool,
     last_buttons: Option<u32>,
     last_sent: Option<(PadState, Instant)>,
     sequence: u64,
@@ -88,6 +89,7 @@ impl Default for GuestInput {
     fn default() -> Self {
         Self {
             announced: None,
+            retry_pending: false,
             last_buttons: None,
             last_sent: None,
             sequence: 0,
@@ -101,6 +103,7 @@ impl GuestInput {
     pub fn new_grant(&mut self) {
         self.last_buttons = None;
         self.last_sent = None;
+        self.retry_pending = false;
     }
     async fn announce(
         &mut self,
@@ -149,6 +152,9 @@ impl GuestInput {
                     .last_sent
                     .is_some_and(|(state, at)| state == sample.state && at.elapsed() < KEEPALIVE))
         {
+            if fast {
+                self.retry_pending = false;
+            }
             return Ok(0);
         }
         let begin = Instant::now();
@@ -173,6 +179,9 @@ impl GuestInput {
             self.last_buttons = Some(sample.state.buttons);
         }
         let sent = fast && peer.send(&bytes, false).await?;
+        if fast {
+            self.retry_pending = !sent;
+        }
         if sent {
             self.last_sent = Some((sample.state, Instant::now()));
         }
@@ -187,6 +196,7 @@ impl GuestInput {
     ) -> Result<u64> {
         let (edges, latest) = feed.take()?;
         if !peer.ready().await {
+            self.retry_pending = false;
             return Ok(0);
         }
         // Preserve captured press/release order before sending the newest analog snapshot.

@@ -70,6 +70,7 @@ pub async fn input_benchmark(samples: usize, poll_8ms: bool) -> Result<InputEvid
                     _ = &mut stop_rx => break,
                     _ = timer.tick() => {},
                     _ = feed.changed.notified(), if !poll_8ms => {},
+                    _ = tokio::time::sleep(Duration::from_millis(8)), if !poll_8ms&&sender.retry_pending => {},
                 }
                 sender.flush(&guest, &feed, session, &mut grant).await?;
                 if !measuring.load(Ordering::Relaxed) { sender.wait = Default::default(); }

@@ -6,6 +6,7 @@ HoriPlay-owned code is MIT. Dependency licenses remain their own.
 |---|---|---|
 | SDL3 3.4.18 | zlib, physical input | Official checksum-pinned runtime in installers/portable tools; license below |
 | Tauri 2 | MIT / Apache-2.0 | Native application shell |
+| Microsoft WebView2Loader 1.0.3800.47 | BSD-3-Clause, Microsoft notice | Microsoft-signed x64 loader beside the GNU portable preview; [SDK license](docs/licenses/WebView2-SDK-LICENSE.txt) |
 | React, TypeScript, Tailwind, Lucide | MIT / applicable package notices | UI dependencies in lockfile |
 | webrtc-rs 0.14 | MIT / Apache-2.0 | ICE/DTLS/SCTP implementation, pinned by Cargo.lock |
 | VIIPER standalone | GPL-3.0-or-later | Independently installed by user, not bundled or linked |

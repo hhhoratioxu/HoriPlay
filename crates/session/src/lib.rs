@@ -519,6 +519,12 @@ if let Some(mut device)=backend.take(){device.neutralize()?;}let mut s=snapshot.
                 let sent=guest_input.flush(&peer,&feed,invite.room,&mut grant).await?;
                 let mut s=snapshot.lock().unwrap();s.sent+=sent;s.granted_slot=grant.map(|(_,slot)|slot);
             },
+            // Congestion must not turn an unsent changed state into a 50 ms idle wait.
+            // Retry only the freshest sample, and only while a fast send is pending.
+            _=tokio::time::sleep(Duration::from_millis(8)), if !host&&guest_input.retry_pending=>{
+                let sent=guest_input.flush(&peer,&feed,invite.room,&mut grant).await?;
+                let mut s=snapshot.lock().unwrap();s.sent+=sent;s.granted_slot=grant.map(|(_,slot)|slot);
+            },
             _=tick.tick()=>{
                 if host {
                     if watchdog.expired(Instant::now()){if let Some(device)=backend.as_mut(){device.neutralize()?;}last_rumble=Some(Rumble{low:0,high:0,duration_ms:0});last_rumble_at=Instant::now()-Duration::from_secs(1);snapshot.lock().unwrap().phase="Input timed out · remote controller neutralized".into();}
