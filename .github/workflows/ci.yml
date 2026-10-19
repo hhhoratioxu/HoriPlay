@@ -29,5 +29,10 @@ jobs:
           cache-dependency-path: apps/desktop/package-lock.json
       - run: npm ci && npm run build
         working-directory: apps/desktop
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/fetch-sdl.ps1
+      - if: runner.os == 'macOS'
+        run: bash scripts/fetch-sdl-macos.sh "$(uname -m)"
       - run: cargo check -p horiplay-desktop --locked
 

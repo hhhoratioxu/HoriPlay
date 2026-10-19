@@ -192,6 +192,7 @@ pub struct LoopbackEvidence {
     pub attempted: usize,
     pub completed: usize,
     pub timed_out: usize,
+    pub skipped_congested: usize,
     pub rtt: horiplay_core::Percentiles,
     pub scope: String,
 }
@@ -200,8 +201,9 @@ pub async fn loopback_benchmark(samples: usize) -> Result<LoopbackEvidence> {
     use horiplay_input_transport::InputPacket;
     use std::time::{Duration, Instant};
     let samples = samples.clamp(1, 5000);
-    let (host, mut host_events, mut host_ice) = Peer::new(true, vec![]).await?;
-    let (guest, mut guest_events, mut guest_ice) = Peer::new(false, vec![]).await?;
+    let (host, mut host_events, mut host_ice) = Peer::configured(true, vec![], false, true).await?;
+    let (guest, mut guest_events, mut guest_ice) =
+        Peer::configured(false, vec![], false, true).await?;
     let result=async {
         let offer=host.offer().await?;let answer=guest.apply(offer).await?.context("missing answer")?;host.apply(answer).await?;
         tokio::time::timeout(Duration::from_secs(20),async{
@@ -209,19 +211,20 @@ pub async fn loopback_benchmark(samples: usize) -> Result<LoopbackEvidence> {
         }).await??;
         // Let the channel-open handshake settle; unreliable state is periodically repeated in production.
         tokio::time::sleep(Duration::from_millis(100)).await;
-        let mut times=Vec::new();let session=Uuid::new_v4();
+        let mut times=Vec::new();let session=Uuid::new_v4();let mut skipped_congested=0;let mut timed_out=0;
         for sequence in 1..=samples{
             let packet=InputPacket{session,controller:1,slot:1,sequence:sequence as u64,timestamp_us:0,state:horiplay_core::PadState{buttons:1,axes:[6553,-16384,32767,-32768],triggers:[8192,32767]}}.encode();
             let begin=Instant::now();
-            if !guest.send(&packet,false).await?{continue;}
+            if !guest.send(&packet,false).await?{skipped_congested+=1;tokio::time::sleep(Duration::from_millis(4)).await;continue;}
             let echo=tokio::time::timeout(Duration::from_millis(150),async{
                 loop{if let Some(PeerEvent::Input(bytes))=host_events.recv().await{if bytes==packet{host.send(&bytes,false).await?;break;}}}
                 loop{if let Some(PeerEvent::Input(bytes))=guest_events.recv().await{if bytes==packet{break;}}}Ok::<_,anyhow::Error>(())
             }).await;
-            if let Ok(value)=echo{value?;times.push(begin.elapsed().as_secs_f64()*1000.0);}
+            if let Ok(value)=echo{value?;times.push(begin.elapsed().as_secs_f64()*1000.0);}else{timed_out+=1;}
             tokio::time::sleep(Duration::from_millis(4)).await;
         }
-        Ok::<_,anyhow::Error>(LoopbackEvidence{transport:"WebRTC ICE + DTLS + SCTP unordered / maxRetransmits=0".into(),path:host.path().await,attempted:samples,completed:times.len(),timed_out:samples-times.len(),rtt:horiplay_core::percentiles(&times),scope:"Same-machine synthetic 56-byte input frame round trip. Excludes SDL physical sampling, virtual driver, game, WAN and video; timeout count is not measured Internet packet loss.".into()})
+        if times.is_empty(){bail!("No loopback frames completed; benchmark failed. Congested skips: {skipped_congested}, timeouts: {timed_out}");}
+        Ok::<_,anyhow::Error>(LoopbackEvidence{transport:"WebRTC ICE + DTLS + SCTP unordered / maxRetransmits=0".into(),path:host.path().await,attempted:samples,completed:times.len(),timed_out,skipped_congested,rtt:horiplay_core::percentiles(&times),scope:"Same-machine synthetic 56-byte input frame round trip. Excludes SDL physical sampling, virtual driver, game, WAN and video; timeout count is not measured Internet packet loss.".into()})
     }.await;
     let _ = host.close().await;
     let _ = guest.close().await;
@@ -239,9 +242,23 @@ impl Peer {
         servers: Vec<RTCIceServer>,
         relay_only: bool,
     ) -> Result<(Self, mpsc::Receiver<PeerEvent>, mpsc::Receiver<Signal>)> {
+        Self::configured(host, servers, relay_only, false).await
+    }
+    async fn configured(
+        host: bool,
+        servers: Vec<RTCIceServer>,
+        relay_only: bool,
+        loopback_only: bool,
+    ) -> Result<(Self, mpsc::Receiver<PeerEvent>, mpsc::Receiver<Signal>)> {
         use webrtc::peer_connection::policy::ice_transport_policy::RTCIceTransportPolicy;
+        let mut settings = webrtc::api::setting_engine::SettingEngine::default();
+        if loopback_only {
+            settings.set_include_loopback_candidate(true);
+            settings.set_ip_filter(Box::new(|ip| ip.is_loopback()));
+        }
         let pc = Arc::new(
             APIBuilder::new()
+                .with_setting_engine(settings)
                 .build()
                 .new_peer_connection(RTCConfiguration {
                     ice_servers: servers,
@@ -464,6 +481,12 @@ fn attach(channel: Arc<RTCDataChannel>, events: mpsc::Sender<PeerEvent>, reliabl
 mod tests {
     use super::*;
     use std::time::Duration;
+    #[tokio::test]
+    async fn high_frequency_snapshots_do_not_starve_after_dcep() {
+        let result = loopback_benchmark(50).await.unwrap();
+        assert!(result.completed >= 45, "{result:?}");
+        println!("Loopback timing: {result:?}");
+    }
     #[test]
     fn invite_and_signed_fingerprints() {
         let invite = Invite::generate();

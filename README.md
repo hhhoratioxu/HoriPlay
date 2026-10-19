@@ -6,6 +6,8 @@
 
 HoriPlay 的目标是 Windows / macOS 低延迟远程游戏与独立手柄同玩。**当前交付聚焦真实输入链路，不是已达到最终验收的可玩串流软件。视频、音频和真实双人游戏验收尚未完成。**
 
+![Controller settings browser preview with native capability unavailable](docs/controller-preview.png)
+
 已实现的生产代码：
 
 - SDL3 原生手柄枚举、热插拔轮询、名称/VID/PID、电量、连接类型、15 个标准按钮、四轴与两路模拟扳机。能力来自 SDL 属性，不能从设备名称推断。

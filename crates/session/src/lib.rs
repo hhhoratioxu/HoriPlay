@@ -57,6 +57,7 @@ pub struct Snapshot {
     pub devices: Vec<PadInfo>,
     pub selected: Option<u32>,
     pub guest_name: Option<String>,
+    pub peer_approved: bool,
     pub remote: Option<RemoteController>,
     pub backend: Option<BackendStatus>,
     pub path: PathInfo,
@@ -114,6 +115,11 @@ impl Engine {
                     }
                     {
                         let mut s = state.lock().unwrap();
+                        if s.selected
+                            .is_some_and(|id| !devices.iter().any(|p| p.id == id))
+                        {
+                            s.selected = None;
+                        }
                         if s.selected.is_none() {
                             s.selected = devices.first().map(|p| p.id);
                         }
@@ -189,6 +195,7 @@ impl Engine {
             s.backend = None;
             s.remote = None;
             s.guest_name = None;
+            s.peer_approved = false;
             s.granted_slot = None;
             s.path = PathInfo::default();
             s.invite = if host { Some(invite.code()) } else { None };
@@ -201,6 +208,7 @@ impl Engine {
             let result = run(config, invite, host, snapshot.clone(), input, rx).await;
             let mut s = snapshot.lock().unwrap();
             s.phase = "Stopped".into();
+            s.peer_approved = false;
             s.granted_slot = None;
             s.backend = None;
             s.path.connected = false;
@@ -336,14 +344,14 @@ async fn run(
         loop {tokio::select! {
             Some(action)=actions.recv()=>match action {
                 Action::Stop=>break,
-                Action::AcceptPeer if host=>{ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::to_string(&ClientMessage::Approve)?.into())).await?;},
+                Action::AcceptPeer if host&&!snapshot.lock().unwrap().peer_approved=>{snapshot.lock().unwrap().peer_approved=true;ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::to_string(&ClientMessage::Approve)?.into())).await?;},
                 Action::RejectPeer if host=>{ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::to_string(&ClientMessage::Reject)?.into())).await?;if approved{break;}},
                 Action::Grant{controller,slot} if host=>{
                     let s=snapshot.lock().unwrap().clone();
                     if !approved||!peer.ready().await||s.remote.as_ref().map(|r|r.id)!=Some(controller){bail!("controller is not connected or peer not authorized");}
                     if backend.is_some(){bail!("revoke the current controller before assigning another slot");}
                     match Viiper::connect(config.viiper_address,slot) {
-                        Ok(device)=>{backend=Some(device);receiver.slots.assign(slot,Owner{peer:invite.room,controller}).map_err(anyhow::Error::msg)?;grant=Some((controller,slot));control(&peer,&Control::Grant{id:controller,slot}).await?;snapshot.lock().unwrap().granted_slot=Some(slot);},
+                        Ok(device)=>{backend=Some(device);receiver.slots.assign(slot,Owner{peer:invite.room,controller}).map_err(anyhow::Error::msg)?;grant=Some((controller,slot));control(&peer,&Control::Grant{id:controller,slot}).await?;let mut s=snapshot.lock().unwrap();s.granted_slot=Some(slot);s.error=None;},
                         Err(e)=>{snapshot.lock().unwrap().error=Some(format!("{e:#}"));}
                     }
                 },
@@ -363,7 +371,7 @@ if let Some(mut device)=backend.take(){device.neutralize()?;}
                         ServerMessage::Created=>snapshot.lock().unwrap().phase="Room ready · invite valid for 10 minutes".into(),
                         ServerMessage::Waiting=>snapshot.lock().unwrap().phase="Waiting for host approval".into(),
                         ServerMessage::GuestWaiting{name}=>{let mut s=snapshot.lock().unwrap();s.guest_name=Some(name);s.phase="Guest waiting · approval required".into();},
-                        ServerMessage::Approved=>{approved=true;snapshot.lock().unwrap().phase="Negotiating encrypted P2P".into();if host{let signal=auth.sign(&peer.offer().await?)?;ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::to_string(&ClientMessage::Signal{signal})?.into())).await?;}},
+                        ServerMessage::Approved=>{if approved{continue;}approved=true;{let mut s=snapshot.lock().unwrap();s.peer_approved=true;s.phase="Negotiating encrypted P2P".into();}if host{let signal=auth.sign(&peer.offer().await?)?;ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::to_string(&ClientMessage::Signal{signal})?.into())).await?;}},
                         ServerMessage::Signal{signal}=>{if !approved{bail!("unsolicited signaling");}
 if let Some(answer)=peer.apply(auth.verify(signal)?).await?{let signal=auth.sign(&answer)?;ws.send(tokio_tungstenite::tungstenite::Message::Text(serde_json::to_string(&ClientMessage::Signal{signal})?.into())).await?;}},
                         ServerMessage::PeerLeft=>break,ServerMessage::Error{message}=>bail!("{message}"),ServerMessage::Heartbeat=>{},
@@ -410,7 +418,7 @@ if let Some(mut device)=backend.take(){device.neutralize()?;}let mut s=snapshot.
             },
             _=tick.tick()=>{
                 if host {
-                    if watchdog.expired(Instant::now()){if let Some(device)=backend.as_mut(){device.neutralize()?;}snapshot.lock().unwrap().phase="Input timed out · remote controller neutralized".into();}
+                    if watchdog.expired(Instant::now()){if let Some(device)=backend.as_mut(){device.neutralize()?;}last_rumble=Some(Rumble{low:0,high:0,duration_ms:0});last_rumble_at=Instant::now()-Duration::from_secs(1);snapshot.lock().unwrap().phase="Input timed out · remote controller neutralized".into();}
                     if let Some(device)=backend.as_mut(){
                         if let Some(rumble)=device.feedback()?{last_rumble=Some(rumble);last_rumble_at=Instant::now()-Duration::from_secs(1);}
                         if let(Some((id,_)),Some(rumble))=(grant,last_rumble){if last_rumble_at.elapsed()>=Duration::from_millis(100){control(&peer,&Control::Rumble{id,value:rumble}).await?;last_rumble_at=Instant::now();if rumble.low==0&&rumble.high==0{last_rumble=None;}}}
@@ -481,7 +489,7 @@ mod tests {
         validate_config(&c).unwrap();
     }
     #[tokio::test]
-    async fn real_signaling_approval_and_controller_announcement() {
+    async fn real_signaling_requires_approval_before_p2p() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {

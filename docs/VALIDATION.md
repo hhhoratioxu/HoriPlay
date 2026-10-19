@@ -37,3 +37,16 @@ SDL3 mappings and native OS support are used for Xbox One, Xbox Series, DualShoc
 ## Release and performance records
 
 CI and installer workflows are separate from runtime acceptance. Release BUILD files name the full source commit and hash every installer/tool archive. Unsigned application packaging does not mean the separately installed driver is unsigned; it also does not mean installation was tested. Local work-time/RTT numbers are appended only after executing the tools.
+
+### Executed local follow-up
+
+- Expanded suite: **15 tests passed**, including a 50-report regression that catches DCEP-handshake bytes starving the fast channel. Default-target strict Clippy passed.
+- Native Windows GNU debug desktop and CLI linked. A 3-second startup smoke observed `HoriPlay · Controller Alpha`, a live process and `Responding=true`; the app was then stopped. This is startup evidence, not full UI or game acceptance. GNU linker emitted a multiple-resource-manifest warning; official installers use MSVC runners.
+- Official SDL 3.4.18 archive was SHA256 verified, loaded, and polled for 3 seconds: **0 connected controllers**. Independent XInput polling also found **0 of 4 indices occupied**. Thus no physical device is hardware-verified.
+- SDL poll-work samples on the empty device list: N=682, P50 **0.0119 ms**, P95 **0.1213 ms**, P99 **0.1489 ms**. These numbers exclude the poll interval and are not real controller sampling latency.
+- Actual WebRTC DTLS/SCTP benchmark with synthetic 56-byte reports over explicit 127.0.0.1 ICE candidates: **300/300 completed**, 0 timed out, 0 congestion skips; RTT P50 **0.8281 ms**, P95 **1.0076 ms**, P99 **1.2142 ms**. See [raw benchmark JSON](evidence/webrtc-loopback-windows.json). This excludes physical input, virtual driver, game and WAN.
+- One development benchmark using all host adapters timed out during ICE establishment on this multi-interface PC. The benchmark was isolated to actual loopback candidates so its scope is repeatable and explicit; production P2P still gathers normal host/STUN/TURN candidates. Cross-interface/WAN stability remains unaccepted.
+- Controller UI preview was visually checked at the native 1240×820 viewport, with no horizontal overflow, Chinese/English and dark/light switching. Empty network metrics remained unmeasured. The saved screenshot is a browser preview with the native-unavailable notice; it is not a fabricated connected session.
+- Official USBip 0.9.8.1 x64 installer was downloaded only for review. Windows Authenticode reported **Valid**, signer **Cloudyne Systems (Scheibling Consulting AB)**, SHA256 `38cad6d4432b52d5bb9409d9ad03b72fdffc4ada4cd3a48fbeca1a2752a8518a`. This verifies the installer signature only. No driver installation, contained-driver verification or restart was performed.
+
+The first macOS CI desktop check failed because its bundled SDL resource was not prepared. CI was corrected to build the checksum-pinned runtime before checking the desktop; the failure was not counted as a passing Mac build.
