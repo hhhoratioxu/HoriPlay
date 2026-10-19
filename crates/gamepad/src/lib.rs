@@ -6,17 +6,39 @@ use std::{
     collections::HashMap,
     ffi::{c_char, c_void, CStr},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 type Handle = *mut c_void;
 pub struct SdlGamepads {
-    api: Api,
+    api: Arc<Api>,
     handles: HashMap<u32, Handle>,
+    _runtime: SdlRuntime,
+}
+/// Initialize on the application main thread. Keep a reference there until samplers stop.
+#[derive(Clone)]
+pub struct SdlRuntime(Arc<RuntimeInner>);
+struct RuntimeInner {
+    api: Arc<Api>,
+    init_thread: std::thread::ThreadId,
+}
+impl Drop for RuntimeInner {
+    fn drop(&mut self) {
+        if std::thread::current().id() == self.init_thread {
+            unsafe {
+                (self.api.quit)(0x00002000);
+            }
+        } else {
+            // Never call SDL shutdown on a foreign thread or unload a library with live SDL
+            // system threads. A misused runtime is safely retained until process exit.
+            std::mem::forget(self.api.clone());
+        }
+    }
 }
 struct Api {
     _lib: Library,
     quit: unsafe extern "C" fn(u32),
-    pump: unsafe extern "C" fn(),
+    update: unsafe extern "C" fn(),
     list: unsafe extern "C" fn(*mut i32) -> *mut u32,
     free: unsafe extern "C" fn(*mut c_void),
     open: unsafe extern "C" fn(u32) -> Handle,
@@ -51,8 +73,14 @@ impl SdlGamepads {
             .ok_or_else(|| anyhow!("missing executable directory"))?
             .join(name))
     }
-    /// Keep this object and every poll on the thread which initializes SDL.
+    /// Main-thread convenience constructor for native diagnostics.
     pub fn load(path: &Path) -> Result<Self> {
+        Ok(SdlRuntime::initialize(path)?.open())
+    }
+}
+impl SdlRuntime {
+    /// SDL requires main-thread initialization. Polling uses SDL_UpdateGamepads, not PumpEvents.
+    pub fn initialize(path: &Path) -> Result<Self> {
         if !path.is_absolute() {
             bail!("SDL3 library path must be absolute");
         }
@@ -70,9 +98,11 @@ impl SdlGamepads {
                     *lib.get(concat!($name, "\0").as_bytes())?
                 };
             }
+            let gamepad_events: unsafe extern "C" fn(bool) = sym!("SDL_SetGamepadEventsEnabled");
+            let joystick_events: unsafe extern "C" fn(bool) = sym!("SDL_SetJoystickEventsEnabled");
             let api = Api {
                 quit: sym!("SDL_QuitSubSystem"),
-                pump: sym!("SDL_PumpEvents"),
+                update: sym!("SDL_UpdateGamepads"),
                 list: sym!("SDL_GetGamepads"),
                 free: sym!("SDL_free"),
                 open: sym!("SDL_OpenGamepad"),
@@ -94,16 +124,28 @@ impl SdlGamepads {
             if !init(0x00002000) {
                 bail!("SDL_Init: {}", read_string((api.error)()));
             }
-            Ok(Self {
-                api,
-                handles: HashMap::new(),
-            })
+            gamepad_events(false);
+            joystick_events(false);
+            Ok(Self(Arc::new(RuntimeInner {
+                api: Arc::new(api),
+                init_thread: std::thread::current().id(),
+            })))
         }
     }
+    /// A sampler owns its handles on one worker thread; it neither initializes nor quits SDL.
+    pub fn open(&self) -> SdlGamepads {
+        SdlGamepads {
+            api: self.0.api.clone(),
+            handles: HashMap::new(),
+            _runtime: self.clone(),
+        }
+    }
+}
+impl SdlGamepads {
     pub fn poll(&mut self) -> Result<Vec<PadInfo>> {
         // SAFETY: owned SDL pointers are only accessed on this object's original thread.
         unsafe {
-            (self.api.pump)();
+            (self.api.update)();
             let mut count = 0;
             let ids = (self.api.list)(&mut count);
             if ids.is_null() {
@@ -205,7 +247,6 @@ impl Drop for SdlGamepads {
                 (self.api.rumble)(*pad, 0, 0, 0);
                 (self.api.close)(*pad);
             }
-            (self.api.quit)(0x00002000);
         }
     }
 }

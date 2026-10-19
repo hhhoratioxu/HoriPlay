@@ -1,5 +1,7 @@
 # Implemented architecture
 
+SDL initializes on the application main thread. A retained runtime owns the library until the input worker is joined. Workers use the documented thread-safe SDL_UpdateGamepads API with gamepad/joystick events disabled; they do not call the main-thread-only SDL_PumpEvents. SDL's joystick update also performs native device detection, so hotplug enumeration does not depend on a WebView event queue.
+
 The repository contains working components, without placeholder media modules.
 
 ```text

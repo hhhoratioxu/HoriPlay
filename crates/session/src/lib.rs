@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use horiplay_core::{percentiles, InputSettings, Owner, PadInfo, Percentiles, Watchdog};
-use horiplay_gamepad::SdlGamepads;
+use horiplay_gamepad::{SdlGamepads, SdlRuntime};
 use horiplay_input_transport::{InputPacket, Receiver};
 use horiplay_networking::{
     ClientMessage, Invite, PathInfo, Peer, PeerEvent, Role, ServerMessage, SignalAuth,
@@ -88,9 +88,15 @@ pub struct Engine {
     actions: tokio::sync::Mutex<Option<mpsc::Sender<Action>>>,
     input: std::sync::mpsc::SyncSender<InputAction>,
     stopped: Arc<AtomicBool>,
+    worker: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
+    _sdl: Option<SdlRuntime>,
 }
 impl Engine {
+    /// Construct on the application main thread for SDL initialization.
     pub fn new() -> Self {
+        Self::new_inner(true)
+    }
+    fn new_inner(enable_input: bool) -> Self {
         let snapshot = Arc::new(Mutex::new(Snapshot {
             phase: "Idle".into(),
             ..Default::default()
@@ -98,49 +104,67 @@ impl Engine {
         let (tx, rx) = std::sync::mpsc::sync_channel(16);
         let stopped = Arc::new(AtomicBool::new(false));
         let (state, stop) = (snapshot.clone(), stopped.clone());
-        std::thread::spawn(move || {
-            let result = (|| -> Result<()> {
-                let path = SdlGamepads::default_path()?;
-                let mut pads = SdlGamepads::load(&path)?;
-                let mut timings = Vec::new();
-                while !stop.load(Ordering::Relaxed) {
-                    let start = Instant::now();
-                    while let Ok(InputAction::Rumble(id, rumble)) = rx.try_recv() {
-                        let _ = pads.rumble(id, rumble.low, rumble.high, rumble.duration_ms);
-                    }
-                    let devices = pads.poll()?;
-                    timings.push(start.elapsed().as_secs_f64() * 1000.0);
-                    if timings.len() > 512 {
-                        timings.remove(0);
-                    }
-                    {
-                        let mut s = state.lock().unwrap();
-                        if s.selected
-                            .is_some_and(|id| !devices.iter().any(|p| p.id == id))
-                        {
-                            s.selected = None;
-                        }
-                        if s.selected.is_none() {
-                            s.selected = devices.first().map(|p| p.id);
-                        }
-                        s.devices = devices;
-                        s.sample = percentiles(&timings);
-                    }
-                    std::thread::sleep(Duration::from_millis(4).saturating_sub(start.elapsed()));
+        // Engine is constructed in Tauri setup / the CLI's main-thread entry point.
+        let runtime = if enable_input {
+            match SdlGamepads::default_path().and_then(|path| SdlRuntime::initialize(&path)) {
+                Ok(runtime) => Some(runtime),
+                Err(e) => {
+                    snapshot.lock().unwrap().input_error = Some(format!("{e:#}"));
+                    None
                 }
-                Ok(())
-            })();
-            if let Err(e) = result {
-                let mut s = state.lock().unwrap();
-                s.devices.clear();
-                s.input_error = Some(format!("{e:#}"));
             }
+        } else {
+            None
+        };
+        let worker = runtime.as_ref().map(|runtime| {
+            let factory = runtime.clone();
+            std::thread::spawn(move || {
+                let result = (|| -> Result<()> {
+                    let mut pads = factory.open();
+                    let mut timings = Vec::new();
+                    while !stop.load(Ordering::Relaxed) {
+                        let start = Instant::now();
+                        while let Ok(InputAction::Rumble(id, rumble)) = rx.try_recv() {
+                            let _ = pads.rumble(id, rumble.low, rumble.high, rumble.duration_ms);
+                        }
+                        let devices = pads.poll()?;
+                        timings.push(start.elapsed().as_secs_f64() * 1000.0);
+                        if timings.len() > 512 {
+                            timings.remove(0);
+                        }
+                        {
+                            let mut s = state.lock().unwrap();
+                            if s.selected
+                                .is_some_and(|id| !devices.iter().any(|p| p.id == id))
+                            {
+                                s.selected = None;
+                            }
+                            if s.selected.is_none() {
+                                s.selected = devices.first().map(|p| p.id);
+                            }
+                            s.devices = devices;
+                            s.sample = percentiles(&timings);
+                        }
+                        std::thread::sleep(
+                            Duration::from_millis(4).saturating_sub(start.elapsed()),
+                        );
+                    }
+                    Ok(())
+                })();
+                if let Err(e) = result {
+                    let mut s = state.lock().unwrap();
+                    s.devices.clear();
+                    s.input_error = Some(format!("{e:#}"));
+                }
+            })
         });
         Self {
             snapshot,
             actions: tokio::sync::Mutex::new(None),
             input: tx,
             stopped,
+            worker: std::sync::Mutex::new(worker),
+            _sdl: runtime,
         }
     }
     pub fn snapshot(&self) -> Snapshot {
@@ -234,6 +258,9 @@ impl Default for Engine {
 impl Drop for Engine {
     fn drop(&mut self) {
         self.stopped.store(true, Ordering::Relaxed);
+        if let Some(worker) = self.worker.lock().unwrap().take() {
+            let _ = worker.join();
+        }
         if let Ok(actions) = self.actions.try_lock() {
             if let Some(tx) = actions.as_ref() {
                 let _ = tx.try_send(Action::Stop);
@@ -497,8 +524,9 @@ mod tests {
                 .await
                 .unwrap();
         });
-        let host = Engine::new();
-        let guest = Engine::new();
+        // Real network test; no native initialization on the Rust test thread.
+        let host = Engine::new_inner(false);
+        let guest = Engine::new_inner(false);
         let config = Config {
             signaling: format!("ws://{address}/ws"),
             ice_urls: vec![],

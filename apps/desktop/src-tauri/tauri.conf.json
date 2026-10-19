@@ -3,7 +3,31 @@
   "productName": "HoriPlay",
   "version": "0.1.0-alpha.1",
   "identifier": "com.horatio.horiplay",
-  "build": {"beforeDevCommand":"npm run dev","beforeBuildCommand":"npm run build","devUrl":"http://localhost:1420","frontendDist":"../dist"},
-  "app": {"windows":[{"title":"HoriPlay · Controller Alpha","width":1240,"height":820,"minWidth":960,"minHeight":680}],"security":{"csp":"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"}},
-  "bundle":{"active":true,"targets":"all","shortDescription":"Encrypted remote controller input alpha","category":"Game","copyright":"Copyright 2026 HoriPlay contributors"}
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "HoriPlay · Controller Alpha",
+        "width": 1240,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 680
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "shortDescription": "Encrypted remote controller input alpha",
+    "category": "Game",
+    "copyright": "Copyright 2026 HoriPlay contributors"
+  }
 }

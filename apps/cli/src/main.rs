@@ -39,6 +39,11 @@ enum Command {
         ice: Vec<String>,
     },
     Doctor,
+    /// Exercise the application input worker and main-thread SDL lifetime.
+    EngineTest {
+        #[arg(long, default_value_t = 2)]
+        seconds: u64,
+    },
     /// Same-machine actual WebRTC echo timing with synthetic 56-byte frames, not hardware input latency.
     TransportBench {
         #[arg(long, default_value_t = 300)]
@@ -48,6 +53,15 @@ enum Command {
 #[tokio::main]
 async fn main() -> Result<()> {
     match Args::parse().command {
+        Command::EngineTest { seconds } => {
+            let engine = Engine::new();
+            tokio::time::sleep(Duration::from_secs(seconds)).await;
+            let snapshot = engine.snapshot();
+            println!("{}", serde_json::to_string_pretty(&snapshot)?);
+            if let Some(error) = snapshot.input_error {
+                anyhow::bail!("native input engine: {error}");
+            }
+        }
         Command::TransportBench { samples } => println!(
             "{}",
             serde_json::to_string_pretty(&horiplay_networking::loopback_benchmark(samples).await?)?
