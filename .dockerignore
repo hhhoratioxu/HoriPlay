@@ -1,0 +1,8 @@
+target
+.git
+.cache
+runtime
+artifacts
+**/node_modules
+**/dist
+**/.env

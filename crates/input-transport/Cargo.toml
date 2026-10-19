@@ -1,0 +1,11 @@
+[package]
+name = "horiplay-input-transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[dependencies]
+horiplay-core.workspace = true
+uuid.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+

@@ -1,0 +1,10 @@
+[package]
+name = "horiplay-gamepad"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[dependencies]
+horiplay-core.workspace = true
+anyhow.workspace = true
+libloading = "0.8"
+

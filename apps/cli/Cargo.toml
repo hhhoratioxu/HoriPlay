@@ -1,0 +1,19 @@
+[package]
+name = "horiplay-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[[bin]]
+name = "horiplay"
+path = "src/main.rs"
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+horiplay-session.workspace = true
+horiplay-gamepad.workspace = true
+horiplay-core.workspace = true
+horiplay-virtual-gamepad.workspace = true
+horiplay-networking.workspace = true
+clap = {version="4",features=["derive"]}
+

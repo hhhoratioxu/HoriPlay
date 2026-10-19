@@ -1,0 +1,14 @@
+/target/
+**/node_modules/
+**/dist/
+.cache/
+runtime/
+artifacts/
+*.log
+.env
+*.pem
+*.key
+*.pfx
+*.p12
+apps/desktop/src-tauri/gen/
+

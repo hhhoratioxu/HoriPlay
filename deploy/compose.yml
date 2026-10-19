@@ -1,0 +1,32 @@
+services:
+  signaling:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+  coturn:
+    image: coturn/coturn:4.6.3
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-port=3478
+      - --min-port=49160
+      - --max-port=49200
+      - --realm=${TURN_REALM:?Set TURN_REALM}
+      - --external-ip=${TURN_PUBLIC_IP:?Set TURN_PUBLIC_IP}
+      - --user=${TURN_USER:?Set TURN_USER}:${TURN_PASSWORD:?Set a unique TURN_PASSWORD}
+      - --lt-cred-mech
+      - --fingerprint
+      - --no-cli
+      - --no-multicast-peers
+      - --no-loopback-peers
+      - --total-quota=32
+      - --user-quota=8

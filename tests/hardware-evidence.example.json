@@ -1,0 +1,16 @@
+{
+  "status":"not_run",
+  "date":null,
+  "source_commit":null,
+  "host":{"os":null,"cpu":null,"gpu":null,"driver_version":null,"driver_signature_verified":null},
+  "guest":{"os":null,"controller_model":null,"vendor_id":null,"product_id":null,"connection":null},
+  "host_controller":{"model":null,"connection":null,"xinput_index":null},
+  "remote_controller":{"requested_index":null,"observed_index":null,"independent_xinput_log":null},
+  "game":{"name":null,"version":null,"two_independent_players":null,"result":null},
+  "analog":{"stick_20_50_100_percent":null,"proportional_triggers":null,"simultaneous_buttons":null},
+  "network":{"different_networks":null,"selected_candidate_pair":null,"direct_or_relay":null},
+  "safety":{"held_input_disconnect":null,"revoke":null,"process_crash":null},
+  "rumble":{"backend_command_observed":null,"physical_rumble_observed":null,"stop_observed":null},
+  "media":{"capture_to_present_p50_ms":null,"p95_ms":null,"p99_ms":null,"measured_fps":null,"duration_minutes":null},
+  "notes":"Fill only from an actual physical/controller/game run. Automated synthetic protocol tests cannot set this record to passed."
+}

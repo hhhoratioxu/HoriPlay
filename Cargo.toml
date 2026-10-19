@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/gamepad", "crates/input-transport", "crates/virtual-gamepad", "crates/networking", "crates/session", "apps/cli", "apps/desktop/src-tauri", "services/signaling"]
+default-members = ["apps/cli", "services/signaling", "crates/core", "crates/gamepad", "crates/input-transport", "crates/virtual-gamepad", "crates/networking", "crates/session"]
+
+[workspace.package]
+version = "0.1.0-alpha.1"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/hhhoratioxu/HoriPlay"
+rust-version = "1.88"
+
+[workspace.dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+uuid = { version = "1", features = ["v4", "serde"] }
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+horiplay-core = { path = "crates/core" }
+horiplay-gamepad = { path = "crates/gamepad" }
+horiplay-input-transport = { path = "crates/input-transport" }
+horiplay-virtual-gamepad = { path = "crates/virtual-gamepad" }
+horiplay-networking = { path = "crates/networking" }
+horiplay-session = { path = "crates/session" }
+
+[profile.release]
+lto = "thin"
+strip = true
+

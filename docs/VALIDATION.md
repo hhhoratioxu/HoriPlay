@@ -1,0 +1,39 @@
+# Validation evidence — 2026-10-19
+
+This is a controller-input alpha. Automated protocol checks and successful compilation are not physical-controller, game or installation acceptance.
+
+## Local automated checks
+
+Environment: Windows x64, Rust 1.97.1 GNU (MSVC linker unavailable), Node.js 24.18.0. Source remains in the requested Chinese workspace; GNU build output uses `D:\CodeX\Builds\HoriPlay` to avoid dlltool Unicode-path failure.
+
+- Rust core/protocol/session test suite: **14 tests passed** in the first complete run. Includes real ICE/DTLS/SCTP dual-channel data, actual forced TURN with a locally running Rust TURN server, approval-controlled signaling, codec boundaries, preserved analog values, replay/slot authorization, watchdog expiration and Xbox output conversion.
+- `cargo check -p horiplay-desktop --locked`: **passed** on Windows GNU.
+- `npm run build`: **passed** (TypeScript and production Vite build).
+- Native application linking, final lint, installers and measured benchmarks: final outcomes are recorded in follow-up evidence below and GitHub workflow logs; do not infer them from the first check.
+
+The unordered channel test repeats snapshots after channel-open negotiation: a zero-retransmit channel does not guarantee receipt of its first packet. Production continuously transmits fresh snapshots and sends button edges reliably. No test is allowed to call a lossy channel lossless.
+
+## Physical acceptance matrix
+
+| Test | Actual result |
+|---|---|
+| 1. Physical Xbox / DualSense / Edge / DS4 / Switch Pro USB and Bluetooth | Not performed; no physical device is declared verified |
+| 2. Physical guest → network → Windows independent XInput | Not performed; requires user-approved signed driver and physical controller |
+| 3. Host physical + guest virtual, independent indices | Not performed |
+| 4. Real local two-player game | Not performed; no game name/result invented |
+| 5. Two different networks / CGNAT / IPv6 | Not performed; automated same-machine direct and TURN are separate |
+| 6. Held stick then real cable/network loss | Not performed; automated watchdog/permission tests passed separately |
+| 7. Real 1080p60 / 120 FPS | Not implemented; no FPS data |
+| 8. Windows Host + physical Windows/macOS Guest | Not performed |
+| 9. Remote physical rumble | Not performed; no hardware rumble support claim |
+| 10. 30-minute physical streaming/control | Not performed; video/audio not implemented |
+
+Use [hardware-evidence.example.json](../tests/hardware-evidence.example.json) for real runs. Empty fields and `not_run` remain empty; automated protocol tests cannot populate a physical game pass.
+
+## Model support
+
+SDL3 mappings and native OS support are used for Xbox One, Xbox Series, DualShock 4, DualSense, DualSense Edge, Switch Pro and compatible third-party controllers. These are implementation targets. **The hardware-verified list is currently empty.** Optional rumble/battery/connection properties are queried rather than inferred from the name. Advanced triggers, motion, touchpads and HD haptics are not implemented.
+
+## Release and performance records
+
+CI and installer workflows are separate from runtime acceptance. Release BUILD files name the full source commit and hash every installer/tool archive. Unsigned application packaging does not mean the separately installed driver is unsigned; it also does not mean installation was tested. Local work-time/RTT numbers are appended only after executing the tools.
